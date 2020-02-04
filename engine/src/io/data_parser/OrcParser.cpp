@@ -1,7 +1,7 @@
 #include "OrcParser.h"
 #include <blazingdb/io/Util/StringUtil.h>
 #include <cudf/legacy/column.hpp>
-#include <cudf/legacy/io_functions.hpp>
+
 
 #include <arrow/io/file.h>
 
@@ -29,13 +29,13 @@ orc_parser::~orc_parser() {
 	// TODO Auto-generated destructor stub
 }
 
-cudf_io::table_with_metadata get_new_orc(cudf_io::read_orc_args orc_arg, 
+cudf_io::table_with_metadata get_new_orc(cudf_io::read_orc_args orc_arg,
 	std::shared_ptr<arrow::io::RandomAccessFile> arrow_file_handle,
 	bool first_row_only = false){
 
 	orc_arg.source = cudf_io::source_info(arrow_file_handle);
-	
-	if (first_row_only) 
+
+	if (first_row_only)
 		orc_arg.num_rows = 1;
 
 	cudf_io::table_with_metadata table_out = cudf_io::read_orc(orc_arg);
@@ -60,11 +60,11 @@ ral::frame::TableViewPair orc_parser::parse(
 	if(file == nullptr) {
 		return std::make_pair(nullptr, ral::frame::BlazingTableView());
 	}
-	
+
 	cudf::experimental::io::read_orc_args new_orc_args = this->orc_args;
 	if(column_indices.size() > 0) {
 		new_orc_args.columns.resize(column_indices.size());
-		
+
 		for(size_t column_i = 0; column_i < column_indices.size(); column_i++) {
 			new_orc_args.columns[column_i] = schema.get_name(column_indices[column_i]);
 		}
@@ -83,7 +83,7 @@ ral::frame::TableViewPair orc_parser::parse(
 
 void orc_parser::parse_schema(
 	std::vector<std::shared_ptr<arrow::io::RandomAccessFile>> files, ral::io::Schema & schema) {
-	
+
 	cudf_io::table_with_metadata table_out = get_new_orc(orc_args, files[0], true);
 	assert(table_out.tbl->num_columns() > 0);
 

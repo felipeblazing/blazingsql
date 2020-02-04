@@ -7,12 +7,18 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <blazingdb/manager/Context.h>
+#include <blazingdb/io/Config/BlazingContext.h>
+#include <cudf/io/functions.hpp>
+#include <mutex>
+#include <queue>
+#include <thread>
 
 typedef cudf::experimental::table CudfTable;
 typedef cudf::table_view CudfTableView;
 typedef cudf::column CudfColumn;
 typedef cudf::column_view CudfColumnView;
-
+namespace cudf_io = cudf::experimental::io;
 
 namespace ral {
 
@@ -40,7 +46,9 @@ public:
 	operator bool() const { return table != nullptr; }
 
 	std::unique_ptr<CudfTable> releaseCudfTable() { return std::move(table);}
-
+	unsigned long long sizeInBytes(){
+		return 0UL;
+	}
 private:
 	std::vector<std::string> columnNames;
 	std::unique_ptr<CudfTable> table;
@@ -80,5 +88,242 @@ typedef std::pair<std::unique_ptr<ral::frame::BlazingTable>, ral::frame::Blazing
 
 }  // namespace frame
 
-}  // namespace ral
+namespace cache{
 
+	enum CacheDataType{
+			GPU,
+			CPU,
+			LOCAL_FILE,
+			IO_FILE
+		};
+
+
+
+class CacheData{
+public:
+
+
+	virtual std::unique_ptr<ral::frame::BlazingTable> decache() = 0;
+	virtual unsigned long long sizeInBytes();
+	virtual ~CacheData(){
+
+	}
+protected:
+	std::vector<std::string> names;
+
+};
+
+class CacheDataLocalFile : public CacheData{
+public:
+  std::unique_ptr<ral::frame::BlazingTable> decache();
+  CacheDataLocalFile(std::unique_ptr<ral::frame::BlazingTable> table);
+	unsigned long long sizeInBytes();
+  virtual ~CacheDataLocalFile(){
+
+	}
+private:
+  std::string filePath;
+  //ideally would be a writeable file
+};
+
+
+class CacheMachine{
+public:
+	CacheMachine(unsigned long long gpuMemory, std::vector<unsigned long long> memoryPerCache, std::vector<CacheDataType> cachePolicyTypes);
+	virtual std::unique_ptr<ral::frame::BlazingTable> pullFromCache();
+//  void eject(int partitionNumber);
+//  void reprocess(int partitionNumber);
+	virtual ~CacheMachine();
+	void addToCache(std::unique_ptr<ral::frame::BlazingTable> table);
+//  void reduceCache(int cacheIndex, unsigned long long reductionAmount);
+//  void incrementCache(int cacheIndex, unsigned long long incrementAmount);
+//TODO: figure out how we tell it which cache to prefer
+
+  bool finished();
+	void finish();
+protected:
+	std::mutex cacheMutex;
+	std::vector<std::unique_ptr<std::queue<std::unique_ptr<CacheData> > > > cache;
+  std::queue<std::unique_ptr<ral::frame::BlazingTable> > gpuData;
+//  std::map<int,std::unique_ptr<CacheData> > operatingData;
+
+	std::vector<CacheDataType> cachePolicyTypes;
+  std::vector<unsigned long long> memoryPerCache;
+  std::vector<unsigned long long> usedMemory;
+  bool _finished;
+};
+
+class WaitingCacheMachine : public CacheMachine{
+public:
+	WaitingCacheMachine(unsigned long long gpuMemory, std::vector<unsigned long long> memoryPerCache, std::vector<CacheDataType> cachePolicyTypes);
+	~WaitingCacheMachine();
+	std::unique_ptr<ral::frame::BlazingTable> pullFromCache();
+
+}
+
+
+
+  class WorkerThread{
+  public:
+    WorkerThread() = delete;
+    virtual ~WorkerThread();
+    virtual bool process();
+  protected:
+    BlazingContext * context;
+    std::string queryString;
+		bool _paused;
+	};
+
+	template <typename Processor>
+	class SingleSourceWorkerThread : WorkerThread{
+	public:
+		SingleSourceWorkerThread(
+			std::shared_ptr<CacheMachine> cacheSource,
+			std::shared_ptr<CacheMachine> cacheSink,
+			std::string queryString,
+			BlazingContext * context): source(cacheSource), sink(cacheSink)
+			 {
+				this->context = context;
+				this->queryString = queryString;
+				this->_paused = false;
+		}
+
+		//returns true when theres nothing left to process
+		void process(){
+
+			if(_paused || source->finished()){
+				return;
+			}
+			auto input = source->pullFromCache();
+			if(input == nullptr){
+				return;
+			}
+			auto output = Processor(input->view(), context, queryString);
+			sink->addToCache(output);
+			process();
+		}
+		void resume(){
+			_paused = false;
+		}
+		void pause(){
+			_paused = true;
+		}
+		virtual ~SingleSourceWorkerThread();
+	private:
+		std::shared_ptr<CacheMachine> source;
+		std::shared_ptr<CacheMachine> sink;
+
+
+	};
+
+//Has two sources, waits until at least one is complte before proceeding
+	template <typename Processor>
+	class DoubleSourceWaitingWorkerThread : WorkerThread{
+	public:
+		SingleSourceWorkerThread(
+			std::shared_ptr<WaitingCacheMachine> cacheSourceLeft,
+			std::shared_ptr<WaitingCacheMachine> cacheSourceRight,
+			std::shared_ptr<CacheMachine> cacheSink,
+			std::string queryString,
+			BlazingContext * context): source(cacheSource), sink(cacheSink)
+			 {
+				this->context = context;
+				this->queryString = queryString;
+				this->_paused = false;
+		}
+
+		//returns true when theres nothing left to process
+		void process(){
+
+			std::thread left([]{
+
+			});
+
+			std::thread right([]{
+
+			});
+
+			//USE a cv here to notify when they finish or what?
+			if(_paused || source->finished()){
+				return;
+			}
+			auto input = source->pullFromCache();
+			if(input == nullptr){
+				return;
+			}
+			auto output = Processor(input->view(), context, queryString);
+			sink->addToCache(output);
+			process();
+		}
+		void resume(){
+			_paused = false;
+		}
+		void pause(){
+			_paused = true;
+		}
+		virtual ~SingleSourceWorkerThread();
+	private:
+		std::shared_ptr<CacheMachine> source;
+		std::shared_ptr<CacheMachine> sink;
+
+
+	};
+
+
+	template <typename Processor>
+  class ProcessMachine{
+  public:
+    ProcessMachine(
+      std::shared_ptr<CacheMachine> cacheSource,
+      std::shared_ptr<CacheMachine> cacheSink,
+      Processor processor, std::string queryString,
+      BlazingContext * context,
+      int numWorkers)
+    : source(cacheSource), sink(cacheSink),
+      context(context), queryString(queryString){
+
+				for(int i = 0; i < numWorkers; i++){
+					workerThreads.push_back(
+						std::move(
+							std::make_unique<SingleSourceWorkerThread< Processor > >(
+								 cacheSource,cacheSink, queryString, context  )));
+				}
+    }
+    void run();
+    void adjustWorkerCount(int numWorkers);
+  private:
+		std::shared_ptr<CacheMachine> source;
+		std::shared_ptr<CacheMachine> sink;
+    std::vector<std::unique_ptr<WorkerThread> > workerThreads;
+    int numWorkers;
+		BlazingContext * context;
+    std::string queryString;
+  };
+
+  template <typename Processor>
+  void ProcessMachine<Processor>::run(){
+		std::vector<std::thread> threads;
+    for(int threadIndex = 0; threadIndex < numWorkers; threadIndex++){
+			std::thread t([this,threadIndex]{
+
+					this->workerThreads[threadIndex]->process();
+
+
+			});
+			threads.push_back(std::move(t));
+    }
+		for(auto & thread : threads){
+			thread.join();
+		}
+  }
+
+
+
+
+
+
+
+
+} // namespace cache
+
+}  // namespace ral
