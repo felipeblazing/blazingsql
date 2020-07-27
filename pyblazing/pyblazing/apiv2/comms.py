@@ -1,4 +1,4 @@
-from tornado.ioloop import PeriodicCallback
+import cudf
 import ucp
 from distributed import get_worker
 
@@ -7,13 +7,15 @@ from distributed.comm.ucx import UCXConnector
 from distributed.comm.addressing import parse_host_port
 from distributed.protocol.serialize import to_serialize
 import concurrent.futures
+from concurrent.futures import CancelledError
+import asyncio
+import traceback
 
 from dask.distributed import default_client
 
 serde = ("cuda", "dask", "pickle", "error")
 
 async def route_message(msg):
-    
     worker = get_worker()
     if msg.metadata["add_to_specific_cache"] == "true":
         graph = worker.query_graphs[int(msg.metadata["query_id"])]
@@ -25,42 +27,59 @@ async def route_message(msg):
     else:
         cache = worker.input_cache
         if(msg.data is None):
-            import cudf
             msg.data = cudf.DataFrame()
         cache.add_to_cache_with_meta(msg.data, msg.metadata)
 
 
-class PollingPlugin:
-    def __init__(self, *args, **kwargs):
-        pass
+# async def run_comm_thread():  # doctest: +SKIP
+#    dask_worker = get_worker()
+#    import asyncio
+#    while True:
+#        df, metadata = dask_worker.output_cache.pull_from_cache()
+#        await UCX.get().send(BlazingMessage(df, metadata))
+#        await asyncio.sleep(1)
 
-    def setup(self, worker=None):
-        self._worker = worker
-        self._pc = PeriodicCallback(callback=self.async_run_polling, callback_time=100)
-        self._pc.start()
-        get_worker().polling = False
+class Communicator():  # doctest: +SKIP
 
+    def __init__(self):
+        self.dask_worker = get_worker()
+        # create a single UCX instance for the lifetime of this worker
+        if not hasattr(self.dask_worker, 'ucx'):
+            # create a single UCX instance for the lifetime of this worker
+            self.dask_worker.ucx = UCX()
 
-    async def async_run_polling(self):
-        import asyncio, os
+        self.ucx = self.dask_worker.ucx
+        self.stoprequest = asyncio.Event()
 
-        worker = get_worker()
-        if worker.polling == True:
-            return
-        worker.polling = True
-        
-        while self._worker.output_cache.has_next_now():            
-            df, metadata = self._worker.output_cache.pull_from_cache()
-            if metadata["add_to_specific_cache"] == "false" and len(df) == 0:
-                df = None
-            await UCX.get().send(BlazingMessage(metadata, df))
-        worker.polling = False
+    async def get_ucx_address(self):
+        self.ucx_address = await self.ucx.get_listener(route_message)
 
+        return self.ucx_address
 
+    async def create_endpoints(self, addr_map):
+        await self.ucx.init_handlers(addr_map)
 
+    async def start(self):
+        async def work():
+            while not self.stoprequest.is_set():
+                # the latency is intentional to not overwhelm the asyncio loop with (blocking) cache polls
+                await asyncio.sleep(0.001)
+                have_data = self.dask_worker.output_cache.has_next_now()
 
-CTRL_STOP = "stopit"
+                if have_data:
+                    df, metadata = self.dask_worker.output_cache.pull_from_cache()
+                    if metadata["add_to_specific_cache"] == "false" and len(df) == 0:
+                        df = None
+                    await self.ucx.send(BlazingMessage(metadata, df))
 
+            if self.dask_worker.output_cache.has_next_now():
+                raise RuntimeError('Message left in queue after graph completion.')
+
+        await work()
+
+    async def stop(self, worker_task):
+        self.stoprequest.set()
+        await worker_task
 
 class BlazingMessage:
     def __init__(self, metadata, data=None):
@@ -74,47 +93,13 @@ class BlazingMessage:
                 len(self.metadata["worker_ids"]) > 0 and
                 self.data is not None)
 
-def set_id_mappings_on_worker(mapping):
-    get_worker().ucx_addresses = mapping
-
-
-async def init_endpoints():
-    for addr in get_worker().ucx_addresses.values():
-        await UCX.get().get_endpoint(addr)
-
-async def listen_async(callback=route_message, client=None):
-    client = client if client is not None else default_client()
-    worker_id_maps = await client.run(UCX.start_listener_on_worker, callback, wait=True)
-    await client.run(set_id_mappings_on_worker, worker_id_maps, wait=True)
-    return worker_id_maps
-
-
-
-def listen(callback=route_message, client=None):
-    client = client if client is not None else default_client()
-    worker_id_maps = client.run(UCX.start_listener_on_worker, callback, wait=True)
-    client.run(set_id_mappings_on_worker, worker_id_maps, wait=True)
-    client.run(UCX.init_handlers,wait=True)
-    return worker_id_maps
-
-
-def cleanup(client=None):
-    async def kill_ucx():
-        await UCX.get().stop_endpoints()
-        UCX.get().stop_listener()
-
-    client = client if client is not None else default_client()
-    return client.run(kill_ucx, wait=True)
-
 
 class UCX:
     """
-    Singleton UCX context to encapsulate all interactions with the
+    UCX context to encapsulate all interactions with the
     UCX-py API and guarantee only a single listener & endpoints are
     created by cuML on a single process.
     """
-
-    __instance = None
 
     def __init__(self):
 
@@ -123,62 +108,64 @@ class UCX:
         self._listener = None
         self.received = 0
         self.sent = 0
+        self.lock = asyncio.Lock()
+        self.ucx_addresses = None
+        self.write_queues = dict()
+        self.worker_tasks = dict()
 
-        assert UCX.__instance is None
+    async def get_listener(self, callback):
+        if self._listener is not None:
+            if callback != self.callback:
+                raise RuntimeError("Updating the UCX listener callback is not implemented.")
+            return self._listener.address
+        self.callback = callback
+        return await self.start_listener()
 
-        UCX.__instance = self
-
-    @staticmethod
-    def get():
-        if UCX.__instance is None:
-            UCX()
-        return UCX.__instance
-
-
-    @staticmethod
-    async def start_listener_on_worker(callback):
-        UCX.get().callback = callback
-        return await UCX.get().start_listener()
-
-    @staticmethod
-    async def init_handlers():
-        addresses = get_worker().ucx_addresses
+    async def init_handlers(self, ucx_addresses):
+        self.ucx_addresses = ucx_addresses
         eps = []
-        for address in addresses.values():
-            ep = await UCX.get().get_endpoint(address)
+        for address in self.ucx_addresses.values():
+            ep = await self.get_endpoint(address)
 
     @staticmethod
     def get_ucp_worker():
-        return ucp.get_ucp_worker()
+        return ucp.core._ctx.worker
 
     async def start_listener(self):
 
         async def handle_comm(comm):
-            should_stop = False
-            while not comm.closed() and not should_stop:
-                msg = await comm.read()
-                if msg == CTRL_STOP:
-                    should_stop = True
-                else:
+            try:
+                while not comm.closed():
+                    msg = await comm.read()
+
                     msg = BlazingMessage(**{k: v.deserialize()
                                             for k, v in msg.items()})
                     self.received += 1
                     await self.callback(msg)
+            except CancelledError:
+                pass
+            except Exception as e:
+                raise
 
         ip, port = parse_host_port(get_worker().address)
-
         self._listener = await UCXListener(ip, handle_comm)
-
         await self._listener.start()
-
-        return "ucx://%s:%s" % (ip, self.listener_port())
+        return self._listener.address
 
     def listener_port(self):
         return self._listener.port
 
+    async def worker(self, queue, ep):
+        while True:
+            msg = await queue.get()
+            await ep.write(msg=msg, serializers=serde)
+
     async def _create_endpoint(self, addr):
         ep = await UCXConnector().connect(addr)
         self._endpoints[addr] = ep
+        queue = asyncio.Queue()
+        self.write_queues[addr] = queue
+        self.worker_tasks[addr] = asyncio.create_task(self.worker(queue, ep))
         return ep
 
     async def get_endpoint(self, addr):
@@ -194,26 +181,19 @@ class UCX:
         Send a BlazingMessage to the workers specified in `worker_ids`
         field of metadata
         """
-        local_dask_addr = get_worker().ucx_addresses[get_worker().address]
-        if blazing_msg.metadata["sender_worker_id"] in blazing_msg.metadata["worker_ids"]:
-            print("Error! Sending message to self. Check launch configuration!")
+        local_dask_addr = self.ucx_addresses[get_worker().address]
         for dask_addr in blazing_msg.metadata["worker_ids"]:
             # Map Dask address to internal ucx endpoint address
-            addr = get_worker().ucx_addresses[dask_addr]
+            addr = self.ucx_addresses[dask_addr]
             ep = await self.get_endpoint(addr)
-            try:
-                to_ser = {"metadata": to_serialize(blazing_msg.metadata)}
-                if blazing_msg.data is not None:
-                    to_ser["data"] = to_serialize(blazing_msg.data)
-            except:
-                print("An error occurred in serialization")
 
-            try:
-                await ep.write(msg=to_ser, serializers=serde)
-            except:
-                print("Error occurred during write")
+            to_ser = {"metadata": to_serialize(blazing_msg.metadata)}
+
+            if blazing_msg.data is not None:
+                to_ser["data"] = to_serialize(blazing_msg.data)
+
+            self.write_queues[addr].put_nowait(to_ser)
             self.sent += 1
-
 
     def abort_endpoints(self):
         for addr, ep in self._endpoints.items():
@@ -222,13 +202,13 @@ class UCX:
             del ep
         self._endpoints = {}
 
-    async def stop_endpoints(self):
-        for addr, ep in self._endpoints.items():
-            if not ep.closed():
-                await ep.write(msg=CTRL_STOP, serializers=serde)
-                await ep.close()
-            del ep
-        self._endpoints = {}
+#    async def stop_endpoints(self):
+#        for addr, ep in self._endpoints.items():
+#            if not ep.closed():
+#                await ep.write(msg=CTRL_SYNC, serializers=serde)
+#                await ep.close()
+#            del ep
+#        self._endpoints = {}
 
     def stop_listener(self):
         if self._listener is not None:
