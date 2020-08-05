@@ -6,14 +6,14 @@ from distributed.comm.ucx import UCXListener
 from distributed.comm.ucx import UCXConnector
 from distributed.comm.addressing import parse_host_port
 from distributed.protocol.serialize import to_serialize
-import concurrent.futures
+
 
 from dask.distributed import default_client
 
 serde = ("cuda", "dask", "pickle", "error")
 
+
 async def route_message(msg):
-    
     worker = get_worker()
     if msg.metadata["add_to_specific_cache"] == "true":
         graph = worker.query_graphs[int(msg.metadata["query_id"])]
@@ -40,23 +40,17 @@ class PollingPlugin:
         self._pc.start()
         get_worker().polling = False
 
-
     async def async_run_polling(self):
-        import asyncio, os
-
         worker = get_worker()
-        if worker.polling == True:
+        if worker.polling is True:
             return
         worker.polling = True
-        
         while self._worker.output_cache.has_next_now():            
             df, metadata = self._worker.output_cache.pull_from_cache()
             if metadata["add_to_specific_cache"] == "false" and len(df) == 0:
                 df = None
             await UCX.get().send(BlazingMessage(metadata, df))
         worker.polling = False
-
-
 
 
 CTRL_STOP = "stopit"
@@ -74,6 +68,7 @@ class BlazingMessage:
                 len(self.metadata["worker_ids"]) > 0 and
                 self.data is not None)
 
+
 def set_id_mappings_on_worker(mapping):
     get_worker().ucx_addresses = mapping
 
@@ -82,6 +77,7 @@ async def init_endpoints():
     for addr in get_worker().ucx_addresses.values():
         await UCX.get().get_endpoint(addr)
 
+
 async def listen_async(callback=route_message, client=None):
     client = client if client is not None else default_client()
     worker_id_maps = await client.run(UCX.start_listener_on_worker, callback, wait=True)
@@ -89,12 +85,11 @@ async def listen_async(callback=route_message, client=None):
     return worker_id_maps
 
 
-
 def listen(callback=route_message, client=None):
     client = client if client is not None else default_client()
     worker_id_maps = client.run(UCX.start_listener_on_worker, callback, wait=True)
     client.run(set_id_mappings_on_worker, worker_id_maps, wait=True)
-    client.run(UCX.init_handlers,wait=True)
+    client.run(UCX.init_handlers, wait=True)
     return worker_id_maps
 
 
@@ -146,6 +141,7 @@ class UCX:
         eps = []
         for address in addresses.values():
             ep = await UCX.get().get_endpoint(address)
+            eps.append(ep)
 
     @staticmethod
     def get_ucp_worker():
@@ -194,7 +190,6 @@ class UCX:
         Send a BlazingMessage to the workers specified in `worker_ids`
         field of metadata
         """
-        local_dask_addr = get_worker().ucx_addresses[get_worker().address]
         if blazing_msg.metadata["sender_worker_id"] in blazing_msg.metadata["worker_ids"]:
             print("Error! Sending message to self. Check launch configuration!")
         for dask_addr in blazing_msg.metadata["worker_ids"]:
@@ -205,15 +200,14 @@ class UCX:
                 to_ser = {"metadata": to_serialize(blazing_msg.metadata)}
                 if blazing_msg.data is not None:
                     to_ser["data"] = to_serialize(blazing_msg.data)
-            except:
+            except Exception:
                 print("An error occurred in serialization")
 
             try:
                 await ep.write(msg=to_ser, serializers=serde)
-            except:
+            except Exception:
                 print("Error occurred during write")
             self.sent += 1
-
 
     def abort_endpoints(self):
         for addr, ep in self._endpoints.items():
@@ -237,4 +231,3 @@ class UCX:
     def __del__(self):
         self.abort_endpoints()
         self.stop_listener()
-
