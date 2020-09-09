@@ -189,8 +189,10 @@ void tcp_message_listener::start_polling(){
 
 }
 
-void ucx_message_listener::poll_begin_message_tag(){
-	auto thread = std::thread([this]{
+void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
+	auto thread = std::thread([running_from_unit_test, this]{
+		cudaSetDevice(0);
+
 		for(;;){
 			std::cout<<"starting poll begin"<<std::endl;
 			std::shared_ptr<ucp_tag_recv_info_t> info_tag = std::make_shared<ucp_tag_recv_info_t>();
@@ -200,7 +202,7 @@ void ucx_message_listener::poll_begin_message_tag(){
 					ucp_worker, 0ull, begin_tag_mask, 0, info_tag.get());
 
 				// NOTE: comment this out when running using dask workers, it crashes for some reason
-				if (message_tag == nullptr) {
+				if (running_from_unit_test && message_tag == nullptr) {
 					ucp_worker_progress(ucp_worker);
 				}
 			}while(message_tag == nullptr);
@@ -283,7 +285,7 @@ void ucx_message_listener::initialize_message_listener(ucp_context_h context, uc
 }
 
 void ucx_message_listener::start_polling(){
-   poll_begin_message_tag();
+   poll_begin_message_tag(false);
 }
 
 ucx_message_listener * ucx_message_listener::get_instance() {

@@ -717,7 +717,14 @@ static const std::size_t packagesLength = 10;
 // }
 
 std::unique_ptr<ral::frame::BlazingTable> generate_table_data(){
-  cudf::test::fixed_width_column_wrapper<int> col1{{4, 5, 3, 5, 8, 5, 6}};
+  cudf::size_type inputRows = 1'000'000;
+
+  using T = int32_t;
+  auto sequence1 = cudf::test::make_counting_transform_iterator(0, [](auto row) {
+      return static_cast<T>(row);
+    });
+  cudf::test::fixed_width_column_wrapper<T> col1(sequence1, sequence1 + inputRows);
+
   cudf::table_view orig_table{{col1}};
   std::vector<std::string> columnNames = {"column_1"};
 
@@ -756,7 +763,7 @@ void SenderCall(const UcpWorkerAddress &peerUcpWorkerAddress,
   comm::message_sender::get_instance()->run_polling();
 
 
-  std::this_thread::sleep_for(std::chrono::seconds(1));
+  std::this_thread::sleep_for(std::chrono::seconds(10));
 }
 
 void ReceiverCall(const UcpWorkerAddress &peerUcpWorkerAddress,
@@ -777,7 +784,7 @@ void ReceiverCall(const UcpWorkerAddress &peerUcpWorkerAddress,
   comm::graphs_info::getInstance().register_graph(query_id, graph);
 
   comm::ucx_message_listener::initialize_message_listener(ucp_context, ucp_worker, nodes_info_map, 1);
-  comm::ucx_message_listener::get_instance()->poll_begin_message_tag();
+  comm::ucx_message_listener::get_instance()->poll_begin_message_tag(true);
 
   auto cache_data = input_cache->pullCacheData();
   auto gpu_cache_data = static_cast<ral::cache::GPUCacheDataMetaData *>(cache_data.get());
