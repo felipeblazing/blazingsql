@@ -28,7 +28,7 @@ message_sender::message_sender(std::shared_ptr<ral::cache::CacheMachine> output_
 		ucp_context_h context,
 		ucp_worker_h origin,
 		int ral_id)
-		: ral_id{ral_id}, origin{origin}, output_cache{output_cache}, node_address_map{node_address_map}, pool{num_threads}, protocol{blazing_protocol::ucx}
+		: ral_id{ral_id}, origin{origin}, output_cache{output_cache}, node_address_map{node_address_map}, pool{num_threads}, protocol{blazing_protocol::ucx}, polling_thread_keep_running{true}
 {
 	request_size = 0;
 	if (protocol == blazing_protocol::ucx)	{
@@ -43,6 +43,12 @@ message_sender::message_sender(std::shared_ptr<ral::cache::CacheMachine> output_
 
 		std::cout << "message_sender request_size: " << request_size << std::endl;
 	}
+}
+
+void message_sender::stop_polling() {
+	std::cout << "Sender: Stop polling" << std::endl;
+	output_cache->finish();
+	polling_thread_keep_running = false;
 }
 
 } // namespace comm

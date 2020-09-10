@@ -87,6 +87,12 @@ public:
 	void wait_for_begin_transmission();
 	virtual void increment_frame_transmission();
 	virtual void increment_begin_transmission();
+
+	/**
+	 * @brief Flush pending communications on the buffer transport
+	 */
+	virtual void flush() = 0;
+
 protected:
 	virtual void send_impl(const char * buffer, size_t buffer_size) = 0;
 

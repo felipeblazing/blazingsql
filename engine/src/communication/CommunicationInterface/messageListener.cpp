@@ -270,7 +270,8 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 }
 
 void ucx_message_listener::stop_polling(){
-  poll_begin_thread_keep_running = false;
+	std::cout << "MessageListener: Stop polling" << std::endl;
+	poll_begin_thread_keep_running = false;
 }
 
 void ucx_message_listener::add_receiver(ucp_tag_t tag,std::shared_ptr<message_receiver> receiver){

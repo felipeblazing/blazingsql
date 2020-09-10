@@ -46,11 +46,17 @@ public:
 	 * @brief A polling function that listens on a cache for data and send it off via some protocol
 	 */
 	void run_polling() {
-		 auto thread = std::thread([this]{
+			polling_thread = std::thread([this]{
 			 cudaSetDevice(0);
 
-			while(true) {
+			while(polling_thread_keep_running) {
 				std::unique_ptr<ral::cache::CacheData> cache_data = output_cache->pullCacheData();
+
+				if (!polling_thread_keep_running) {
+					std::cout << "Stopping pull cache data" << std::endl;
+					break;
+				}
+
 				std::cout<<"pulled cache data"<<std::endl;
 				auto * gpu_cache_data = static_cast<ral::cache::GPUCacheDataMetaData *>(cache_data.get());
 				auto data_and_metadata = gpu_cache_data->decacheWithMetaData();
@@ -118,9 +124,12 @@ public:
 					}
 				});
 			}
+			std::cout << "Stopping polling" << std::endl;
 		 });
-		 thread.detach();
+		 polling_thread.detach();
 	}
+
+	void stop_polling();
 private:
 	static message_sender * instance;
 
@@ -132,6 +141,8 @@ private:
 	ucp_worker_h origin;
 	size_t request_size;
 	int ral_id;
+	std::thread polling_thread;
+	bool polling_thread_keep_running;
 };
 
 }  // namespace comm
