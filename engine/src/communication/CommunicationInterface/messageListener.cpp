@@ -189,8 +189,12 @@ void tcp_message_listener::start_polling(){
 
 }
 
+void tcp_message_listener::stop_polling(){
+  throw std::runtime_error("Not implemented");
+}
+
 void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
-	auto thread = std::thread([running_from_unit_test, this]{
+	poll_begin_thread = std::thread([running_from_unit_test, this]{
 		cudaSetDevice(0);
 
 		for(;;){
@@ -206,6 +210,10 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 					ucp_worker_progress(ucp_worker);
 				}
 			}while(message_tag == nullptr);
+
+      if (!poll_begin_thread_keep_running) {
+        break;
+      }
 
 			std::cout<<"probed tag"<<std::endl;
 
@@ -243,9 +251,12 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 
 		std::cout<<">>>>>>>>>   FINISHED poll_begin_message_tag"<<std::endl;
 	});
-	thread.detach();
+	poll_begin_thread.detach();
 }
 
+void ucx_message_listener::stop_polling(){
+  poll_begin_thread_keep_running = false;
+}
 
 void ucx_message_listener::add_receiver(ucp_tag_t tag,std::shared_ptr<message_receiver> receiver){
 	tag_to_receiver[tag] = receiver;
@@ -264,7 +275,7 @@ void ucx_message_listener::increment_frame_receiver(ucp_tag_t tag){
 ucx_message_listener * ucx_message_listener::instance = nullptr;
 
 ucx_message_listener::ucx_message_listener(ucp_context_h context, ucp_worker_h worker, const std::map<std::string, comm::node>& nodes, int num_threads) :
-	message_listener(nodes, num_threads), ucp_worker{worker}
+	message_listener(nodes, num_threads), ucp_worker{worker}, poll_begin_thread_keep_running{true}
 {
   ucp_context_attr_t attr;
   attr.field_mask = UCP_ATTR_FIELD_REQUEST_SIZE;
