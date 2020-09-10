@@ -201,34 +201,34 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 			std::cout<<"starting poll begin"<<std::endl;
 			std::shared_ptr<ucp_tag_recv_info_t> info_tag = std::make_shared<ucp_tag_recv_info_t>();
 			ucp_tag_message_h message_tag = nullptr;
-      for (;;) {
-        message_tag = ucp_tag_probe_nb(
-            ucp_worker, 0ull, begin_tag_mask, 0, info_tag.get());
+			for (;;) {
+				message_tag = ucp_tag_probe_nb(
+						ucp_worker, 0ull, begin_tag_mask, 0, info_tag.get());
 
-        if (!poll_begin_thread_keep_running) {
-          std::cout << "Stopping poll begin on message tag" << std::endl;
-          break;
-        }
+				if (!poll_begin_thread_keep_running) {
+					std::cout << "Stopping poll begin on message tag" << std::endl;
+					break;
+				}
 
-        // NOTE: comment this out when running using dask workers, it crashes for some reason
-        if (/*running_from_unit_test && */ message_tag != nullptr) {
-          break;  // Here we have a message
-        } else {
-          if (ucp_worker_progress(ucp_worker)) {
-            continue;  // Some events were polled
-          }
-        }
+				// NOTE: comment this out when running using dask workers, it crashes for some reason
+				if (/*running_from_unit_test && */ message_tag != nullptr) {
+					break;	// Here we have a message
+				} else {
+					if (ucp_worker_progress(ucp_worker)) {
+						continue;  // Some events were polled
+					}
+				}
 
-        ucs_status_t status = ucp_worker_wait(ucp_worker);
-        if (status != UCS_OK) {
-          throw std::runtime_error("poll_begin_message_tag: ucp_worker_wait");
-        }
-      }
+				ucs_status_t status = ucp_worker_wait(ucp_worker);
+				if (status != UCS_OK) {
+					throw std::runtime_error("poll_begin_message_tag: ucp_worker_wait");
+				}
+			}
 
-      if (!poll_begin_thread_keep_running) {
-        std::cout << "Stopping poll begin on message tag" << std::endl;
-        break;
-      }
+			if (!poll_begin_thread_keep_running) {
+				std::cout << "Stopping poll begin on message tag" << std::endl;
+				break;
+			}
 
 			std::cout<<"probed tag"<<std::endl;
 
