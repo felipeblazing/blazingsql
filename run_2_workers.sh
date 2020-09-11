@@ -24,6 +24,11 @@ done
 
 # Dask-cuda-worker
 
+export UCX_TLS=tcp,sockcm,cuda_copy,cuda_ipc
+export UCX_SOCKADDR_TLS_PRIORITY=sockcm
+export UCX_NET_DEVICES=$ARG_INTERFACE
+export UCX_MEMTYPE_CACHE=n
+
 UCXPY_NON_BLOCKING_MODE=True \
 CUDA_VISIBLE_DEVICES=0  \
 DASK_UCX__CUDA_COPY=True \
