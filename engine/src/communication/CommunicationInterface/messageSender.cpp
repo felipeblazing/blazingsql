@@ -28,7 +28,7 @@ message_sender::message_sender(std::shared_ptr<ral::cache::CacheMachine> output_
 		ucp_context_h context,
 		ucp_worker_h origin,
 		int ral_id)
-		: ral_id{ral_id}, origin{origin}, output_cache{output_cache}, node_address_map{node_address_map}, pool{num_threads}, protocol{blazing_protocol::ucx}, polling_thread_keep_running{true}
+		: ral_id{ral_id}, origin{origin}, output_cache{output_cache}, node_address_map{node_address_map}, pool{num_threads}, protocol{blazing_protocol::ucx}, polling_thread_keep_running{true}, polling_thread_has_at_least_a_thread_pooled{false}
 {
 	request_size = 0;
 	if (protocol == blazing_protocol::ucx)	{
@@ -46,9 +46,13 @@ message_sender::message_sender(std::shared_ptr<ral::cache::CacheMachine> output_
 }
 
 void message_sender::stop_polling() {
-	std::cout << "Sender: Stop polling" << std::endl;
-	output_cache->finish();
+	std::cout << "Sender: Stopping polling" << std::endl;
+	std::unique_lock<std::mutex> lock(polling_started_mutex);
+	polling_started_condition.wait(lock);
+	pool.stop(true);
 	polling_thread_keep_running = false;
+	output_cache->finish();
+	std::cout << "Sender: Stopped polling" << std::endl;
 }
 
 } // namespace comm

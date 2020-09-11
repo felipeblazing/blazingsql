@@ -762,8 +762,6 @@ void SenderCall(const UcpWorkerAddress &peerUcpWorkerAddress,
   comm::message_sender::initialize_instance(output_cache, nodes_info_map, 1, ucp_context, ucp_worker, 0);
   comm::message_sender::get_instance()->run_polling();
 
-
-  std::this_thread::sleep_for(std::chrono::seconds(3));
   comm::message_sender::get_instance()->stop_polling();
 }
 

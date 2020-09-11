@@ -119,10 +119,17 @@ public:
 						transport->wait_until_complete();  // ensures that the message has been sent before returning the thread
 													// to the pool
 						std::cout<<"completed"<<std::endl;
+
+						transport->flush();
+						std::cout << "flushed" << std::endl;
 					} catch(const std::exception&) {
 						throw;
 					}
 				});
+				if (!polling_thread_has_at_least_a_thread_pooled) {
+					polling_started_condition.notify_one();
+					polling_thread_has_at_least_a_thread_pooled = true;
+				}
 			}
 			std::cout << "Stopping polling" << std::endl;
 		 });
@@ -143,6 +150,9 @@ private:
 	int ral_id;
 	std::thread polling_thread;
 	bool polling_thread_keep_running;
+	std::condition_variable polling_started_condition;
+	std::mutex polling_started_mutex;
+	bool polling_thread_has_at_least_a_thread_pooled;
 };
 
 }  // namespace comm
