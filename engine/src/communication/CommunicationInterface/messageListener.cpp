@@ -195,10 +195,6 @@ void tcp_message_listener::stop_polling(){
   throw std::runtime_error("Not implemented");
 }
 
-bool tcp_message_listener::is_running(){
-  throw std::runtime_error("Not implemented");
-}
-
 void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 	poll_begin_thread = std::thread([running_from_unit_test, this]{
 		cudaSetDevice(0);
@@ -216,49 +212,10 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 					break;
 				}
 
-				//std::cout << "Probe nb: " << reinterpret_cast<std::uint64_t>(message_tag) << std::endl;
-
 				// NOTE: comment this out when running using dask workers, it crashes for some reason
 				if (/*running_from_unit_test && */ message_tag != nullptr) {
 					break;	// Here we have a message
-				} else {
-					if (ucp_worker_progress(ucp_worker)) {
-						continue;  // Some events were polled
-					}
 				}
-
-				int epoll_fd = 0;
-				ucs_status_t status = ucp_worker_get_efd(ucp_worker, &epoll_fd);
-				if (status != UCS_OK) {
-					throw std::runtime_error("ucp_worker_get_efd");
-				}
-
-				int epoll_fd_local = epoll_create(1);
-
-				struct epoll_event ev;
-				ev.data.u64 = 0;
-				ev.data.fd = epoll_fd;
-				ev.events = EPOLLIN;
-				int err = epoll_ctl(epoll_fd_local, EPOLL_CTL_ADD, epoll_fd, &ev);
-				if (err < 0) {
-					close(epoll_fd_local);
-					throw std::runtime_error("epoll_ctl");
-				}
-
-				status = ucp_worker_arm(ucp_worker);
-				if (status == UCS_ERR_BUSY) {  // events are arrived already
-					close(epoll_fd_local);
-					continue;
-				}
-				if (status != UCS_OK) {
-					close(epoll_fd_local);
-					throw std::runtime_error("ucp_worker_arm");
-				}
-
-				do {
-					err = epoll_wait(epoll_fd_local, &ev, 1, -1);
-				} while ((err == -1) && (errno == EINTR));
-				close(epoll_fd_local);
 			}
 
 			if (!poll_begin_thread_keep_running) {
@@ -308,10 +265,6 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 void ucx_message_listener::stop_polling(){
 	std::cout << "MessageListener: Stop polling" << std::endl;
 	poll_begin_thread_keep_running = false;
-}
-
-bool ucx_message_listener::is_running(){
-   return instance != nullptr;
 }
 
 void ucx_message_listener::add_receiver(ucp_tag_t tag,std::shared_ptr<message_receiver> receiver){
@@ -370,6 +323,22 @@ ucx_message_listener * ucx_message_listener::get_instance() {
 	if(instance == NULL) {
 		throw::std::exception();
 	}
+	return instance;
+}
+
+ucx_message_listener * ucx_message_listener::get_instance(ucp_context_h context, 
+                                                          ucp_worker_h worker, 
+                                                          const std::map<std::string, comm::node>& nodes_info_map, 
+                                                          int num_threads) {
+  if (instance == nullptr) {
+    std::cout << "get_instance: initialize_message_listener" << std::endl;
+    comm::ucx_message_listener::initialize_message_listener(
+        context, worker, nodes_info_map, num_threads);
+
+    std::cout << "get_instance: poll_begin_message_tag" << std::endl;
+    instance->poll_begin_message_tag(false);
+  }
+
 	return instance;
 }
 

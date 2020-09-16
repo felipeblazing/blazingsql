@@ -22,6 +22,14 @@ class message_sender {
 public:
 
 	static message_sender * get_instance();
+	static message_sender *
+	get_instance(std::shared_ptr<ral::cache::CacheMachine> output_cacheC,
+							 std::map<std::string, node> node_address_map,
+							 int num_threads,
+							 ucp_context_h context,
+							 ucp_worker_h origin_node,
+							 int ral_id,
+							 comm::blazing_protocol protocol);
 	/**
 	 * @brief Constructs a message_sender
 	 *
@@ -139,7 +147,6 @@ public:
 	}
 
 	void stop_polling();
-	bool is_running();
 private:
 	static message_sender * instance;
 

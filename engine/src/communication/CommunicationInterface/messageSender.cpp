@@ -12,6 +12,30 @@ message_sender * message_sender::get_instance() {
 	return instance;
 }
 
+message_sender *message_sender::get_instance(
+		std::shared_ptr<ral::cache::CacheMachine> output_cacheC,
+		std::map<std::string, node> node_address_map,
+		int num_threads,
+		ucp_context_h context,
+		ucp_worker_h origin_node,
+		int ral_id,
+		comm::blazing_protocol protocol) {
+	if (instance == nullptr) {
+		std::cout << "get_instance: initializing sender" << std::endl;
+		comm::message_sender::initialize_instance(output_cacheC,
+		                                          node_address_map,
+		                                          num_threads,
+		                                          context,
+		                                          origin_node,
+		                                          ral_id,
+		                                          protocol);
+		std::cout << "get_instance: starting polling sender" << std::endl;
+		instance->run_polling();
+	}
+
+	return instance;
+}
+
 void message_sender::initialize_instance(std::shared_ptr<ral::cache::CacheMachine> output_cache,
 		std::map<std::string, node> node_address_map,
 		int num_threads,
@@ -55,10 +79,6 @@ void message_sender::stop_polling() {
 	polling_thread_keep_running = false;
 	output_cache->finish();
 	std::cout << "Sender: Stopped polling" << std::endl;
-}
-
-bool message_sender::is_running() {
-  return instance != nullptr;
 }
 
 } // namespace comm
