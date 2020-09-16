@@ -193,6 +193,10 @@ void tcp_message_listener::stop_polling(){
   throw std::runtime_error("Not implemented");
 }
 
+bool tcp_message_listener::is_running(){
+  throw std::runtime_error("Not implemented");
+}
+
 void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 	poll_begin_thread = std::thread([running_from_unit_test, this]{
 		cudaSetDevice(0);
@@ -209,6 +213,8 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 					std::cout << "Stopping poll begin on message tag" << std::endl;
 					break;
 				}
+
+				//std::cout << "Probe nb: " << reinterpret_cast<std::uint64_t>(message_tag) << std::endl;
 
 				// NOTE: comment this out when running using dask workers, it crashes for some reason
 				if (/*running_from_unit_test && */ message_tag != nullptr) {
@@ -272,6 +278,10 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 void ucx_message_listener::stop_polling(){
 	std::cout << "MessageListener: Stop polling" << std::endl;
 	poll_begin_thread_keep_running = false;
+}
+
+bool ucx_message_listener::is_running(){
+   return instance != nullptr;
 }
 
 void ucx_message_listener::add_receiver(ucp_tag_t tag,std::shared_ptr<message_receiver> receiver){

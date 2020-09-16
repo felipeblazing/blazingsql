@@ -55,4 +55,8 @@ void message_sender::stop_polling() {
 	std::cout << "Sender: Stopped polling" << std::endl;
 }
 
+bool message_sender::is_running() {
+  return instance != nullptr;
+}
+
 } // namespace comm

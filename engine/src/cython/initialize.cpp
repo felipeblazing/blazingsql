@@ -301,13 +301,17 @@ std::pair<std::shared_ptr<CacheMachine>,std::shared_ptr<CacheMachine> > initiali
 		std::cout<<"getting worker"<<worker_id<<std::endl;
 		std::cout<<"initializing listener"<<std::endl;
 
+		std::cout << "workers_ucp_info length " << workers_ucp_info.size() << std::endl;
+
 		ucp_context_h ucp_context = reinterpret_cast<ucp_context_h>(workers_ucp_info[0].context_handle);
 		ucp_worker_h self_worker = reinterpret_cast<ucp_worker_h>(workers_ucp_info[0].worker_handle);
 
 		comm::ucx_message_listener::initialize_message_listener(
 			ucp_context, self_worker,nodes_info_map,20);
 		std::cout<<"starting polling"<<std::endl;
-		comm::ucx_message_listener::get_instance()->poll_begin_message_tag(false);
+		if (!comm::ucx_message_listener::get_instance()->is_running()) {
+		  comm::ucx_message_listener::get_instance()->poll_begin_message_tag(false);
+    }
 
 		std::cout<<"initializing sender"<<std::endl;
 
@@ -316,8 +320,9 @@ std::pair<std::shared_ptr<CacheMachine>,std::shared_ptr<CacheMachine> > initiali
 			20, ucp_context, self_worker, ralId);
 		std::cout<<"starting polling sender"<<std::endl;
 
-		comm::message_sender::get_instance()->run_polling();
-
+		if (!comm::message_sender::get_instance()->is_running()) {
+		  comm::message_sender::get_instance()->run_polling();
+    }
 	}
 		std::cout<<"finish comms init!!!"<<std::endl;
 

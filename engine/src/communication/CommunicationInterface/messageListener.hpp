@@ -19,6 +19,7 @@ public:
     }
     virtual void start_polling() = 0;
     virtual void stop_polling() = 0;
+    virtual bool is_running() = 0;
     ctpl::thread_pool<BlazingThread> & get_pool();
     std::map<std::string, comm::node> get_node_map();
 
@@ -32,6 +33,7 @@ class tcp_message_listener : public message_listener {
 public:
     void start_polling() override;
     void stop_polling() override;
+    bool is_running() override;
     virtual ~tcp_message_listener(){
 
     }
@@ -54,6 +56,7 @@ public:
     ucp_worker_h get_worker();
     void start_polling() override;
     void stop_polling() override;
+    bool is_running() override;
 private:
     ucx_message_listener(ucp_context_h context, ucp_worker_h worker, const std::map<std::string, comm::node>& nodes, int num_threads);
 	virtual ~ucx_message_listener(){

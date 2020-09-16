@@ -137,6 +137,7 @@ public:
 	}
 
 	void stop_polling();
+	bool is_running();
 private:
 	static message_sender * instance;
 
