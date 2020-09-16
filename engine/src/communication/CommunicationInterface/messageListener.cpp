@@ -1,5 +1,7 @@
 #include "messageListener.hpp"
 #include <sys/socket.h>
+#include <sys/epoll.h>
+#include <errno.h>
 
 namespace comm {
 
@@ -225,10 +227,39 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 					}
 				}
 
-				ucs_status_t status = ucp_worker_wait(ucp_worker);
+				int epoll_fd = 0;
+				ucs_status_t status = ucp_worker_get_efd(ucp_worker, &epoll_fd);
 				if (status != UCS_OK) {
-					throw std::runtime_error("poll_begin_message_tag: ucp_worker_wait");
+					throw std::runtime_error("ucp_worker_get_efd");
 				}
+
+				int epoll_fd_local = epoll_create(1);
+
+				struct epoll_event ev;
+				ev.data.u64 = 0;
+				ev.data.fd = epoll_fd;
+				ev.events = EPOLLIN;
+				int err = epoll_ctl(epoll_fd_local, EPOLL_CTL_ADD, epoll_fd, &ev);
+				if(err < 0) {
+					close(epoll_fd_local);
+					throw std::runtime_error("epoll_ctl");
+				}
+
+				status = ucp_worker_arm(ucp_worker);
+				if (status == UCS_ERR_BUSY) { // events are arrived already
+					close(epoll_fd_local);
+					continue;
+				}
+				if (status != UCS_OK) {
+					close(epoll_fd_local);
+					throw std::runtime_error("ucp_worker_arm");
+				}
+
+				do {
+					err = epoll_wait(epoll_fd_local, &ev, 1, -1);
+				} while ((err == -1) && (errno == EINTR));
+				close(epoll_fd_local);
+
 			}
 
 			if (!poll_begin_thread_keep_running) {
