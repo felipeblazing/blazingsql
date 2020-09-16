@@ -6,6 +6,11 @@ export DASK_DISTRIBUTED__SCHEDULER__WORK_STEALING=True
 
 ARG_INTERFACE=wlo1
 
+export UCX_TLS=tcp,sockcm,cuda_copy,cuda_ipc
+export UCX_SOCKADDR_TLS_PRIORITY=sockcm
+export UCX_NET_DEVICES=$ARG_INTERFACE
+export UCX_MEMTYPE_CACHE=n
+
 while getopts 'i:' o; do
   case "${o}" in
     i)
