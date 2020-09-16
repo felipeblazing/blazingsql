@@ -240,13 +240,13 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 				ev.data.fd = epoll_fd;
 				ev.events = EPOLLIN;
 				int err = epoll_ctl(epoll_fd_local, EPOLL_CTL_ADD, epoll_fd, &ev);
-				if(err < 0) {
+				if (err < 0) {
 					close(epoll_fd_local);
 					throw std::runtime_error("epoll_ctl");
 				}
 
 				status = ucp_worker_arm(ucp_worker);
-				if (status == UCS_ERR_BUSY) { // events are arrived already
+				if (status == UCS_ERR_BUSY) {  // events are arrived already
 					close(epoll_fd_local);
 					continue;
 				}
@@ -259,7 +259,6 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 					err = epoll_wait(epoll_fd_local, &ev, 1, -1);
 				} while ((err == -1) && (errno == EINTR));
 				close(epoll_fd_local);
-
 			}
 
 			if (!poll_begin_thread_keep_running) {
