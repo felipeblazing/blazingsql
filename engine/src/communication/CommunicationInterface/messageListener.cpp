@@ -1,5 +1,7 @@
 #include "messageListener.hpp"
 #include <sys/socket.h>
+#include <sys/epoll.h>
+#include <errno.h>
 
 namespace comm {
 
@@ -189,23 +191,46 @@ void tcp_message_listener::start_polling(){
 
 }
 
+void tcp_message_listener::stop_polling(){
+  throw std::runtime_error("Not implemented");
+}
+
 void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
-	auto thread = std::thread([running_from_unit_test, this]{
+	poll_begin_thread = std::thread([running_from_unit_test, this]{
 		cudaSetDevice(0);
 
 		for(;;){
 			std::cout<<"starting poll begin"<<std::endl;
 			std::shared_ptr<ucp_tag_recv_info_t> info_tag = std::make_shared<ucp_tag_recv_info_t>();
 			ucp_tag_message_h message_tag = nullptr;
-			do {
+			for (;;) {
 				message_tag = ucp_tag_probe_nb(
-					ucp_worker, 0ull, begin_tag_mask, 0, info_tag.get());
+						ucp_worker, 0ull, begin_tag_mask, 0, info_tag.get());
+
+				if (!poll_begin_thread_keep_running) {
+					std::cout << "Stopping poll begin on message tag" << std::endl;
+					break;
+				}
 
 				// NOTE: comment this out when running using dask workers, it crashes for some reason
-				if (running_from_unit_test && message_tag == nullptr) {
-					ucp_worker_progress(ucp_worker);
+				if (message_tag != nullptr) {
+					break;	// Here we have a message
+				} else {
+					if (running_from_unit_test && ucp_worker_progress(ucp_worker)) {
+						continue;  // Some events were polled
+					}
 				}
-			}while(message_tag == nullptr);
+
+				ucs_status_t status = ucp_worker_wait(ucp_worker);
+				if (status != UCS_OK) {
+					throw std::runtime_error("poll_begin_message_tag: ucp_worker_wait");
+				}
+			}
+
+			if (!poll_begin_thread_keep_running) {
+				std::cout << "Stopping poll begin on message tag" << std::endl;
+				break;
+			}
 
 			std::cout<<"probed tag"<<std::endl;
 
@@ -243,9 +268,13 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 
 		std::cout<<">>>>>>>>>   FINISHED poll_begin_message_tag"<<std::endl;
 	});
-	thread.detach();
+	poll_begin_thread.detach();
 }
 
+void ucx_message_listener::stop_polling(){
+	std::cout << "MessageListener: Stop polling" << std::endl;
+	poll_begin_thread_keep_running = false;
+}
 
 void ucx_message_listener::add_receiver(ucp_tag_t tag,std::shared_ptr<message_receiver> receiver){
 	tag_to_receiver[tag] = receiver;
@@ -265,7 +294,7 @@ ucx_message_listener * ucx_message_listener::instance = nullptr;
 tcp_message_listener * tcp_message_listener::instance = nullptr;
 
 ucx_message_listener::ucx_message_listener(ucp_context_h context, ucp_worker_h worker, const std::map<std::string, comm::node>& nodes, int num_threads) :
-	message_listener(nodes, num_threads), ucp_worker{worker}
+	message_listener(nodes, num_threads), ucp_worker{worker}, poll_begin_thread_keep_running{true}
 {
   ucp_context_attr_t attr;
   attr.field_mask = UCP_ATTR_FIELD_REQUEST_SIZE;
@@ -303,6 +332,22 @@ ucx_message_listener * ucx_message_listener::get_instance() {
 	if(instance == NULL) {
 		throw::std::exception();
 	}
+	return instance;
+}
+
+ucx_message_listener * ucx_message_listener::get_instance(ucp_context_h context, 
+                                                          ucp_worker_h worker, 
+                                                          const std::map<std::string, comm::node>& nodes_info_map, 
+                                                          int num_threads) {
+  if (instance == nullptr) {
+    std::cout << "get_instance: initialize_message_listener" << std::endl;
+    comm::ucx_message_listener::initialize_message_listener(
+        context, worker, nodes_info_map, num_threads);
+
+    std::cout << "get_instance: poll_begin_message_tag" << std::endl;
+    instance->poll_begin_message_tag(false);
+  }
+
 	return instance;
 }
 

@@ -148,6 +148,34 @@ ucp_tag_t ucx_buffer_transport::generate_message_tag() {
 	return *reinterpret_cast<ucp_tag_t *>(&blazing_tag);
 }
 
+static void ucp_flush_callback(void *, ucs_status_t) {}
+
+void ucx_buffer_transport::flush() {
+  // according to http://openucx.github.io/ucx/api/v1.6/html/group___u_c_p___e_n_d_p_o_i_n_t.html#ga599c9b9272bfdd662afaa247d8e4dfd6
+  for (auto const &node : destinations) {
+    ucp_ep_h ucp_ep = node.get_ucp_endpoint();
+    void *request = ucp_ep_flush_nb(ucp_ep, 0, ucp_flush_callback);
+    if (request == NULL) {
+      continue;  // Request was already flushed
+    } else {
+      if (UCS_PTR_IS_ERR(request)) {
+        ucs_status_t status = UCS_PTR_STATUS(request);
+        std::cout << "Error on node " << node.ip() << " with ucs status "
+                  << ucs_status_string(status) << std::endl;
+        // TODO: exception handling
+        continue;
+      } else {
+        ucs_status_t status;
+        do {
+          ucp_worker_progress(origin_node);
+          status = ucp_request_check_status(request);
+        } while (status == UCS_INPROGRESS);
+        ucp_request_release(request);
+      }
+    }
+  }
+}
+
 void ucx_buffer_transport::send_begin_transmission() {
 
 	std::cout<<"sending begin transmission"<<std::endl;
@@ -304,6 +332,10 @@ tcp_buffer_transport::tcp_buffer_transport(
         }
         socket_fds.push_back(socket_fd);
     }
+}
+
+void tcp_buffer_transport::flush() {
+	throw std::runtime_error("Not implemented");
 }
 
 void tcp_buffer_transport::send_begin_transmission(){

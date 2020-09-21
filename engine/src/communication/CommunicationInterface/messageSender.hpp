@@ -22,6 +22,14 @@ class message_sender {
 public:
 
 	static message_sender * get_instance();
+	static message_sender *
+	get_instance(std::shared_ptr<ral::cache::CacheMachine> output_cacheC,
+							 std::map<std::string, node> node_address_map,
+							 int num_threads,
+							 ucp_context_h context,
+							 ucp_worker_h origin_node,
+							 int ral_id,
+							 comm::blazing_protocol protocol);
 	/**
 	 * @brief Constructs a message_sender
 	 *
@@ -48,11 +56,17 @@ public:
 	 * @brief A polling function that listens on a cache for data and send it off via some protocol
 	 */
 	void run_polling() {
-		 auto thread = std::thread([this]{
+			polling_thread = std::thread([this]{
 			 cudaSetDevice(0);
 
-			while(true) {
+			while(polling_thread_keep_running) {
 				std::unique_ptr<ral::cache::CacheData> cache_data = output_cache->pullCacheData();
+
+				if (!polling_thread_keep_running) {
+					std::cout << "Stopping pull cache data" << std::endl;
+					break;
+				}
+
 				std::cout<<"pulled cache data"<<std::endl;
 				auto * gpu_cache_data = static_cast<ral::cache::GPUCacheDataMetaData *>(cache_data.get());
 				auto data_and_metadata = gpu_cache_data->decacheWithMetaData();
@@ -115,14 +129,24 @@ public:
 						transport->wait_until_complete();  // ensures that the message has been sent before returning the thread
 													// to the pool
 						std::cout<<"completed"<<std::endl;
+
+						transport->flush();
+						std::cout << "flushed" << std::endl;
 					} catch(const std::exception&) {
 						throw;
 					}
 				});
+				if (!polling_thread_has_at_least_a_thread_pooled) {
+					polling_started_condition.notify_one();
+					polling_thread_has_at_least_a_thread_pooled = true;
+				}
 			}
+			std::cout << "Stopping polling" << std::endl;
 		 });
-		 thread.detach();
+		 polling_thread.detach();
 	}
+
+	void stop_polling();
 private:
 	static message_sender * instance;
 
@@ -134,6 +158,11 @@ private:
 	ucp_worker_h origin;
 	size_t request_size;
 	int ral_id;
+	std::thread polling_thread;
+	bool polling_thread_keep_running;
+	std::condition_variable polling_started_condition;
+	std::mutex polling_started_mutex;
+	bool polling_thread_has_at_least_a_thread_pooled;
 };
 
 }  // namespace comm

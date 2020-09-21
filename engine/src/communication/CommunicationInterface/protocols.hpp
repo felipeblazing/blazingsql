@@ -66,6 +66,7 @@ public:
         int ral_id);
     ~ucx_buffer_transport();
 
+    void flush() override;
     void send_begin_transmission() override;
     void increment_frame_transmission() override;
 	void increment_begin_transmission() override;
@@ -106,6 +107,7 @@ public:
         ctpl::thread_pool<BlazingThread> * allocate_copy_buffer_pool);
     ~tcp_buffer_transport();
 
+    void flush() override;
     void send_begin_transmission() override;
 
 protected:
