@@ -213,10 +213,10 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 				}
 
 				// NOTE: comment this out when running using dask workers, it crashes for some reason
-				if (/*running_from_unit_test && */ message_tag != nullptr) {
+				if (message_tag != nullptr) {
 					break;	// Here we have a message
 				} else {
-					if (ucp_worker_progress(ucp_worker)) {
+					if (running_from_unit_test && ucp_worker_progress(ucp_worker)) {
 						continue;  // Some events were polled
 					}
 				}
