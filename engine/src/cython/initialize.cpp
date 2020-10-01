@@ -849,7 +849,8 @@ std::pair<std::shared_ptr<CacheMachine>,std::shared_ptr<CacheMachine> > initiali
 }
 
 void finalize() {
-
+	comm::ucx_message_listener::get_instance()->stop_polling();
+	comm::message_sender::get_instance()->stop_polling();
 	BlazingRMMFinalize();
 	spdlog::shutdown();
 	cudaDeviceReset();
