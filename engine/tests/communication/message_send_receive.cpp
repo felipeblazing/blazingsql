@@ -10,15 +10,15 @@
 #include "execution_graph/logic_controllers/BatchProcessing.h"
 
 #include <memory>
-#include <tests/utilities/base_fixture.hpp>
+#include <cudf_test/base_fixture.hpp>
 #include <cudf/table/table_view.hpp>
 #include <cudf/sorting.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/column/column_factories.hpp>
-#include <tests/utilities/column_utilities.hpp>
-#include <tests/utilities/type_lists.hpp>
-#include <tests/utilities/column_wrapper.hpp>
-#include <tests/utilities/table_utilities.hpp>
+#include <cudf_test/column_utilities.hpp>
+#include <cudf_test/type_lists.hpp>
+#include <cudf_test/column_wrapper.hpp>
+#include <cudf_test/table_utilities.hpp>
 
 #include <ucp/api/ucp.h>
 #include <ucs/type/status.h>
@@ -717,7 +717,7 @@ static const std::size_t packagesLength = 10;
 // }
 
 std::unique_ptr<ral::frame::BlazingTable> generate_table_data(){
-  cudf::size_type inputRows = 1'000'000;
+  cudf::size_type inputRows = 10'000'000;
 
   using T = int32_t;
   auto sequence1 = cudf::test::make_counting_transform_iterator(0, [](auto row) {
@@ -756,8 +756,11 @@ void SenderCall(const UcpWorkerAddress &peerUcpWorkerAddress,
 
   auto output_cache = std::make_shared<ral::cache::CacheMachine>(nullptr);
 
-  output_cache->addCacheData(
-          std::make_unique<ral::cache::GPUCacheDataMetaData>(generate_table_data(), generate_metadata()), "", true);
+  for (size_t i = 0; i < 30; i++)
+  {
+    output_cache->addCacheData(
+            std::make_unique<ral::cache::GPUCacheDataMetaData>(generate_table_data(), generate_metadata()), "", true);
+  }
 
   comm::message_sender::initialize_instance(output_cache, nodes_info_map, 1, ucp_context, ucp_worker, 0,comm::blazing_protocol::ucx);
   comm::message_sender::get_instance()->run_polling();
@@ -785,17 +788,18 @@ void ReceiverCall(const UcpWorkerAddress &peerUcpWorkerAddress,
   comm::ucx_message_listener::initialize_message_listener(ucp_context, ucp_worker, nodes_info_map, 1);
   comm::ucx_message_listener::get_instance()->poll_begin_message_tag(true);
 
-  auto cache_data = input_cache->pullCacheData();
-  auto gpu_cache_data = static_cast<ral::cache::GPUCacheDataMetaData *>(cache_data.get());
-  auto table_metadata_pair = gpu_cache_data->decacheWithMetaData();
+  for (size_t i = 0; i < 30; i++)
+  {
+    auto cache_data = input_cache->pullCacheData();
+    auto gpu_cache_data = static_cast<ral::cache::GPUCacheDataMetaData *>(cache_data.get());
+    auto table_metadata_pair = gpu_cache_data->decacheWithMetaData();
 
-  auto expected_metadata = generate_metadata();
-  EXPECT_TRUE(expected_metadata.get_values() == table_metadata_pair.second.get_values());
+    auto expected_metadata = generate_metadata();
+    EXPECT_TRUE(expected_metadata.get_values() == table_metadata_pair.second.get_values());
 
-  auto expected_table = generate_table_data();
-  cudf::test::expect_tables_equal(expected_table->view(), table_metadata_pair.first->view());
-
-  comm::ucx_message_listener::get_instance()->stop_polling();
+    auto expected_table = generate_table_data();
+    cudf::test::expect_tables_equal(expected_table->view(), table_metadata_pair.first->view());
+  }
 }
 
 // struct MessageSendReceiveTest : public BlazingUnitTest {
@@ -829,5 +833,7 @@ int main(int argc, char *argv[]){
   }else {
     ::Run(ReceiverCall, AddressExchanger::MakeForReceiver(exchangingPort, "localhost"));
   };
+
+  std::cout << ">>>> END UNIT TEST"<<std::endl;
   return 0;
 }
