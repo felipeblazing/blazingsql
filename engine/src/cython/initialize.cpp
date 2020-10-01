@@ -687,6 +687,8 @@ std::pair<std::shared_ptr<CacheMachine>,std::shared_ptr<CacheMachine> > initiali
 		std::cout<<"getting worker"<<worker_id<<std::endl;
 		std::cout<<"initializing listener"<<std::endl;
 
+		std::cout << "workers_ucp_info length " << workers_ucp_info.size() << std::endl;
+
 		// ucp_context_h ucp_context = reinterpret_cast<ucp_context_h>(workers_ucp_info[0].context_handle);
 		// ucp_worker_h self_worker = reinterpret_cast<ucp_worker_h>(workers_ucp_info[0].worker_handle);
 
@@ -809,18 +811,16 @@ std::pair<std::shared_ptr<CacheMachine>,std::shared_ptr<CacheMachine> > initiali
 		}
 
 		if(protocol == comm::blazing_protocol::ucx){
-			comm::ucx_message_listener::initialize_message_listener(
-				ucp_context, self_worker,nodes_info_map,20);
-			std::cout<<"starting polling"<<std::endl;
-			comm::ucx_message_listener::get_instance()->poll_begin_message_tag(true);
+			comm::ucx_message_listener::get_instance(
+					ucp_context, self_worker, nodes_info_map, 20);
 
-			std::cout<<"initializing sender"<<std::endl;
-
-			comm::message_sender::initialize_instance(output_input_caches.first,
-				nodes_info_map,
-				20, ucp_context, self_worker, ralId,comm::blazing_protocol::ucx);
-			std::cout<<"starting polling sender"<<std::endl;
-
+			comm::message_sender::get_instance(output_input_caches.first,
+			                                   nodes_info_map,
+			                                   20,
+			                                   ucp_context,
+			                                   self_worker,
+			                                   ralId,
+			                                   comm::blazing_protocol::ucx);
 
 		}else{
 

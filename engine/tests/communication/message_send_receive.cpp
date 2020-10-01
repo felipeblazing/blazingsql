@@ -800,6 +800,8 @@ void ReceiverCall(const UcpWorkerAddress &peerUcpWorkerAddress,
     auto expected_table = generate_table_data();
     cudf::test::expect_tables_equal(expected_table->view(), table_metadata_pair.first->view());
   }
+  
+  comm::ucx_message_listener::get_instance()->stop_polling();
 }
 
 // struct MessageSendReceiveTest : public BlazingUnitTest {
