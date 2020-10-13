@@ -25,6 +25,9 @@ public:
 	ComputeAggregateKernel(std::size_t kernel_id, const std::string & queryString, std::shared_ptr<Context> context, std::shared_ptr<ral::cache::graph> query_graph)
 		: kernel{kernel_id, queryString, context, kernel_type::ComputeAggregateKernel} {
         this->query_graph = query_graph;
+
+        std::tie(this->group_column_indices, this->aggregation_input_expressions, this->aggregation_types,
+            this->aggregation_column_assigned_aliases) = ral::operators::parseGroupByExpression(this->expression);
 	}
 
     bool can_you_throttle_my_input() {
@@ -32,22 +35,47 @@ public:
 	}
 
 	virtual kstatus run() {
-		CodeTimer timer;
+		
+        CodeTimer timer;
         CodeTimer eventTimer(false);
-
-        std::vector<std::string> aggregation_input_expressions, aggregation_column_assigned_aliases;
-        std::tie(this->group_column_indices, aggregation_input_expressions, this->aggregation_types,
-            aggregation_column_assigned_aliases) = ral::operators::parseGroupByExpression(this->expression);
+    
+        eventTimer.start();
 
         bool ordered = false; // If we start using sort based aggregations this may need to change
-        BatchSequence input(this->input_cache(), this, ordered);
+        BatchSequenceBypass input(this->input_cache(), this); // WSM TODO, need to make BatchSequenceBypass take in "ordered" parameter
         int batch_count = 0;
         while (input.wait_for_next()) {
 
-            this->output_cache()->wait_if_cache_is_saturated();
-            auto batch = input.next();
+            // this->output_cache()->wait_if_cache_is_saturated();
+            std::vector<std::unique_ptr<ral::cache::CacheData>> batches;
+            batches.push_back(input.next());
 
+            kstatus status = run_batch(std::move(batches), batch_count);
+
+            batch_count++;
+        }
+
+        logger->debug("{query_id}|{step}|{substep}|{info}|{duration}|kernel_id|{kernel_id}||",
+                    "query_id"_a=context->getContextToken(),
+                    "step"_a=context->getQueryStep(),
+                    "substep"_a=context->getQuerySubstep(),
+                    "info"_a="ComputeAggregate Kernel Completed",
+                    "duration"_a=timer.elapsed_time(),
+                    "kernel_id"_a=this->get_id());
+
+        return kstatus::proceed;
+    }
+
+    virtual kstatus run_batch(std::vector<std::unique_ptr<ral::cache::CacheData>> batches, int batch_count) {
+
+        // run_batch for ComputeAggregateKernel only really expects one CacheData in batches
+        for (int cache_ind = 0; cache_ind < batches.size(); cache_ind++){
+            
+            CodeTimer eventTimer(false);
+        
             eventTimer.start();
+
+            auto batch = batches[cache_ind]->decache();
 
             auto log_input_num_rows = batch ? batch->num_rows() : 0;
             auto log_input_num_bytes = batch ? batch->sizeInBytes() : 0;
@@ -85,7 +113,7 @@ public:
                 }
 
                 this->add_to_output_cache(std::move(output));
-                batch_count++;
+                
             } catch(const std::exception& e) {
                 // TODO add retry here
                 logger->error("{query_id}|{step}|{substep}|{info}|{duration}||||",
@@ -97,16 +125,6 @@ public:
                 throw;
             }
         }
-
-        logger->debug("{query_id}|{step}|{substep}|{info}|{duration}|kernel_id|{kernel_id}||",
-                    "query_id"_a=context->getContextToken(),
-                    "step"_a=context->getQueryStep(),
-                    "substep"_a=context->getQuerySubstep(),
-                    "info"_a="ComputeAggregate Kernel Completed",
-                    "duration"_a=timer.elapsed_time(),
-                    "kernel_id"_a=this->get_id());
-
-        return kstatus::proceed;
     }
 
     std::pair<bool, uint64_t> get_estimated_output_num_rows(){
@@ -131,6 +149,8 @@ public:
 private:
     std::vector<AggregateKind> aggregation_types;
     std::vector<int> group_column_indices;
+    std::vector<std::string> aggregation_input_expressions;
+    std::vector<std::string> aggregation_column_assigned_aliases;
 };
 
 class DistributeAggregateKernel : public kernel {
@@ -138,6 +158,11 @@ public:
 	DistributeAggregateKernel(std::size_t kernel_id, const std::string & queryString, std::shared_ptr<Context> context, std::shared_ptr<ral::cache::graph> query_graph)
 		: kernel{kernel_id, queryString, context, kernel_type::DistributeAggregateKernel} {
         this->query_graph = query_graph;
+        std::tie(this->group_column_indices, this->aggregation_input_expressions, this->aggregation_types,
+            this->aggregation_column_assigned_aliases) = ral::operators::parseGroupByExpression(this->expression);
+
+        std::transform(this->group_column_indices.begin(), this->group_column_indices.end(), 
+            std::back_inserter(this->columns_to_hash), [](int index) { return (cudf::size_type)index; });
 	}
 
     bool can_you_throttle_my_input() {
@@ -149,17 +174,9 @@ public:
 
         CodeTimer timer;
 
-        std::vector<int> group_column_indices;
-        std::vector<std::string> aggregation_input_expressions, aggregation_column_assigned_aliases; // not used in this kernel
-        std::vector<AggregateKind> aggregation_types; // not used in this kernel
-        std::tie(group_column_indices, aggregation_input_expressions, aggregation_types,
-            aggregation_column_assigned_aliases) = ral::operators::parseGroupByExpression(this->expression);
-
-        std::vector<cudf::size_type> columns_to_hash;
-        std::transform(group_column_indices.begin(), group_column_indices.end(), std::back_inserter(columns_to_hash), [](int index) { return (cudf::size_type)index; });
         std::vector<std::string> messages_to_wait_for;
 		std::map<std::string, int> node_count;
-        BlazingThread producer_thread([this, group_column_indices, columns_to_hash, &node_count, &messages_to_wait_for](){
+        BlazingThread producer_thread([this, &node_count, &messages_to_wait_for](){
             // num_partitions = context->getTotalNodes() will do for now, but may want a function to determine this in the future.
             // If we do partition into something other than the number of nodes, then we have to use part_ids and change up more of the logic
             int num_partitions = this->context->getTotalNodes();
@@ -176,7 +193,7 @@ public:
                 try {
                     // If its an aggregation without group by we want to send all the results to the master node
                     auto& self_node = ral::communication::CommunicationData::getInstance().getSelfNode();
-                    if (group_column_indices.size() == 0) {
+                    if (this->group_column_indices.size() == 0) {
                         if(this->context->isMasterNode(self_node)) {
                             this->output_.get_cache()->addToCache(std::move(batch),"",true);
 							
@@ -210,7 +227,7 @@ public:
                         std::unique_ptr<CudfTable> hashed_data; // Keep table alive in this scope
                         if (batch_view.num_rows() > 0) {
                             std::vector<cudf::size_type> hased_data_offsets;
-                            std::tie(hashed_data, hased_data_offsets) = cudf::hash_partition(batch->view(), columns_to_hash, num_partitions);
+                            std::tie(hashed_data, hased_data_offsets) = cudf::hash_partition(batch->view(), this->columns_to_hash, num_partitions);
                             // the offsets returned by hash_partition will always start at 0, which is a value we want to ignore for cudf::split
                             std::vector<cudf::size_type> split_indexes(hased_data_offsets.begin() + 1, hased_data_offsets.end());
                             partitioned = cudf::split(hashed_data->view(), split_indexes);
@@ -274,7 +291,6 @@ public:
             }
 
 
-
             auto self_node = ral::communication::CommunicationData::getInstance().getSelfNode();
             auto nodes = context->getAllNodes();
             std::string worker_ids = "";
@@ -327,7 +343,11 @@ public:
 	}
 
 private:
-
+    std::vector<AggregateKind> aggregation_types;
+    std::vector<int> group_column_indices;
+    std::vector<std::string> aggregation_input_expressions;
+    std::vector<std::string> aggregation_column_assigned_aliases;
+    std::vector<cudf::size_type> columns_to_hash;
 };
 
 
@@ -343,24 +363,62 @@ public:
 	}
 
 	virtual kstatus run() {
+        
+        kstatus status = kstatus::stop;
+        CodeTimer timer;
+        
+        std::vector<std::unique_ptr<ral::cache::CacheData>> batches;
+		
+        // This Kernel needs all of the input before it can do any output. So lets wait until all the input is available
+        this->input_cache()->wait_until_finished();
+
+        bool ordered = false; // If we start using sort based aggregations this may need to change
+        BatchSequenceBypass input(this->input_cache(), this);
+        try {
+            while (input.wait_for_next()) {
+                batches.push_back(input.next());
+            }
+
+            timer.start();
+
+            status = run_batch(std::move(batches), 0);
+            
+            timer.stop();
+
+        } catch(const std::exception& e) {
+            // TODO add retry here
+            logger->error("{query_id}|{step}|{substep}|{info}|{duration}||||",
+                        "query_id"_a=context->getContextToken(),
+                        "step"_a=context->getQueryStep(),
+                        "substep"_a=context->getQuerySubstep(),
+                        "info"_a="In MergeAggregate kernel for {}. What: {}"_format(expression, e.what()),
+                        "duration"_a="");
+            throw;
+        }
+
+
+        logger->debug("{query_id}|{step}|{substep}|{info}|{duration}|kernel_id|{kernel_id}||",
+                    "query_id"_a=context->getContextToken(),
+                    "step"_a=context->getQueryStep(),
+                    "substep"_a=context->getQuerySubstep(),
+                    "info"_a="MergeAggregate Kernel Completed",
+                    "duration"_a=timer.elapsed_time(),
+                    "kernel_id"_a=this->get_id());
+
+		return status;
+	}
+
+    virtual kstatus run_batch(std::vector<std::unique_ptr<ral::cache::CacheData>> batches, int batch_count) {
+
         CodeTimer timer;
         CodeTimer eventTimer(false);
 
         std::vector<std::unique_ptr<ral::frame::BlazingTable>> tablesToConcat;
 		std::vector<ral::frame::BlazingTableView> tableViewsToConcat;
 
-        // This Kernel needs all of the input before it can do any output. So lets wait until all the input is available
-        this->input_cache()->wait_until_finished();
-
-        bool ordered = false; // If we start using sort based aggregations this may need to change
-        BatchSequence input(this->input_cache(), this, ordered);
-        int batch_count=0;
         try {
-            while (input.wait_for_next()) {
-                auto batch = input.next();
-                // std::cout<<"MergeAggregateKernel batch "<<batch_count<<std::endl;
-                // ral::utilities::print_blazing_table_view_schema(batch->toBlazingTableView(), "MergeAggregateKernel_batch" + std::to_string(batch_count));
-                batch_count++;
+            for (int i = 0; i < batches.size(); i++) {
+                auto batch = batches[i]->decache();
                 tableViewsToConcat.emplace_back(batch->toBlazingTableView());
                 tablesToConcat.emplace_back(std::move(batch));
             }
@@ -439,18 +497,8 @@ public:
                         "duration"_a="");
             throw;
         }
-
-
-        logger->debug("{query_id}|{step}|{substep}|{info}|{duration}|kernel_id|{kernel_id}||",
-                    "query_id"_a=context->getContextToken(),
-                    "step"_a=context->getQueryStep(),
-                    "substep"_a=context->getQuerySubstep(),
-                    "info"_a="MergeAggregate Kernel Completed",
-                    "duration"_a=timer.elapsed_time(),
-                    "kernel_id"_a=this->get_id());
-
-		return kstatus::proceed;
-	}
+        return kstatus::proceed;
+    }
 
     bool ready_to_execute() {
         // WSM TODO: in this function we want to wait until all batch inputs are available
