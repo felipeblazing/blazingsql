@@ -374,7 +374,7 @@ target_link_libraries(blazingsql-engine
 
     zstd
     lz4
-
+    nvcomp
     ${S3_LIBRARY}
 
     ${GCS_LIBRARY}

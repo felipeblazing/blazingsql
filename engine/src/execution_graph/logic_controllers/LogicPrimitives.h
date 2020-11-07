@@ -63,6 +63,15 @@ private:
 	std::vector<std::unique_ptr<BlazingColumn>> columns;
 };
 
+class BlazingCompressedTable{
+public:
+	BlazingCompressedTable(std::unique_ptr<BlazingTable> table);
+	std::unique_ptr<BlazingTable> decompress();
+private:
+	std::vector<blazingdb::transport::ColumnTransport> transports;
+	std::vector<rmm::device_buffer> compressed_buffers;
+};
+
 class BlazingTableView {
 public:
 	BlazingTableView();
