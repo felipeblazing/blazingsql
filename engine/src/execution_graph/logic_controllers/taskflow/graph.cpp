@@ -19,7 +19,13 @@ namespace cache {
 		}
 		this->add_edge(p.src, p.dst, source_port_name, target_port_name, p.cache_machine_config);
 	}
-
+	void graph::clear_kernels(){
+		container_.clear();
+		edges_.clear();
+		reverse_edges_.clear();
+		mem_monitor = nullptr;
+	}
+	
 	void graph::set_memory_monitor(std::shared_ptr<ral::MemoryMonitor> mem_monitor){
 		this->mem_monitor = mem_monitor;
 	}
@@ -72,7 +78,9 @@ namespace cache {
 								if(state == kstatus::proceed) {
 									source->output_.finish();
 								} else if (edge.target != -1) { // not a dummy node
-									std::cout<<"ERROR kernel "<<source_id<<" did not finished successfully"<<std::endl;
+									auto logger = spdlog::get("batch_logger");
+									std::string log_detail = "ERROR kernel " + std::to_string(source_id) + " did not finished successfully";
+									logger->error("|||{info}|||||","info"_a=log_detail);
 								}
 							}));
 							
@@ -195,7 +203,9 @@ namespace cache {
 				return target_kernel->get_estimated_output_num_rows();
 			}
 		}
-		std::cout<<"ERROR: In get_estimated_input_rows_to_cache could not find edge for kernel "<<id<<" cache "<<port_name<<std::endl;
+		auto logger = spdlog::get("batch_logger");
+		std::string log_detail = "ERROR: In get_estimated_input_rows_to_cache could not find edge for kernel " + std::to_string(id) + " cache " + port_name;
+		logger->error("|||{info}|||||","info"_a=log_detail);
 		return std::make_pair(false, 0);
 	}
 

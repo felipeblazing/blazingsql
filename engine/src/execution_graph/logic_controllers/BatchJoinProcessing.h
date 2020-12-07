@@ -76,10 +76,6 @@ public:
 		std::tie(this->expression, this->condition, this->filter_statement, this->join_type) = parseExpressionToGetTypeAndCondition(this->expression);
 	}
 
-	bool can_you_throttle_my_input() {
-		return false;  // join has its own sort of limiter, so its not good to try to apply another limiter
-	}
-
 	std::unique_ptr<TableSchema> left_schema{nullptr};
  	std::unique_ptr<TableSchema> right_schema{nullptr};
 
@@ -412,6 +408,10 @@ public:
 									"duration"_a=timer.elapsed_time(),
 									"kernel_id"_a=this->get_id());
 
+		// these are intra kernel caches. We want to make sure they are empty before we finish.
+		this->leftArrayCache->clear();
+		this->rightArrayCache->clear();
+
 		return kstatus::proceed;
 	}
 
@@ -450,10 +450,6 @@ public:
 		std::tie(this->expression, this->condition, this->filter_statement, this->join_type) = parseExpressionToGetTypeAndCondition(this->expression);
 	}
 
-	bool can_you_throttle_my_input() {
-		return true;
-	}
-
 	// this function makes sure that the columns being joined are of the same type so that we can join them properly
 	void computeNormalizationData(const	std::vector<cudf::data_type> & left_types, const	std::vector<cudf::data_type> & right_types){
 		std::vector<cudf::data_type> left_join_types, right_join_types;
@@ -484,7 +480,6 @@ public:
 				spdlog::logger* logger,
 				int table_idx)
 	{
-		using ColumnDataPartitionMessage = ral::communication::messages::ColumnDataPartitionMessage;
 
 		bool done = false;
 		// num_partitions = context->getTotalNodes() will do for now, but may want a function to determine this in the future.
@@ -529,7 +524,7 @@ public:
 						// also we need a BlazingTable to put into the cache, we cant cache views.
 						std::unique_ptr<ral::frame::BlazingTable> partition_table_clone = partition_table_view.clone();
 
-						bool added = output->addToCache(std::move(partition_table_clone), cache_id + "_" + kernel_id,true);
+						bool added = output->addToCache(std::move(partition_table_clone), cache_id + "_" + kernel_id,false);
 						if (added) {
 							node_count[self_node.id()]++;
 						}
@@ -555,7 +550,7 @@ public:
 					metadata.add_value(ral::cache::WORKER_IDS_METADATA_LABEL, dest_node.id());
 					metadata.add_value(ral::cache::CACHE_ID_METADATA_LABEL, cache_id);
 
-					bool added = graph_output->addCacheData(std::make_unique<ral::cache::GPUCacheDataMetaData>(table_view.clone(), metadata),"",true);
+					bool added = graph_output->addCacheData(std::make_unique<ral::cache::GPUCacheDataMetaData>(table_view.clone(), metadata),"",false);
 					if (added) {
 						node_count[dest_node.id()]++;
 					}
@@ -666,26 +661,30 @@ public:
 		int self_node_idx = context->getNodeIndex(self_node);
 		auto nodes_to_send = context->getAllOtherNodes(self_node_idx);
 		auto output_cache = this->query_graph->get_output_message_cache();
+		std::string worker_ids_metadata;
 		std::vector<std::string> messages_to_wait_for;
 		for (auto i = 0; i < nodes_to_send.size(); i++)	{
+			worker_ids_metadata += nodes_to_send[i].id();
+			if (i < nodes_to_send.size() - 1) {
+				worker_ids_metadata += ",";
+			}
 			messages_to_wait_for.push_back(
 				"determine_if_we_are_scattering_a_small_table_" + std::to_string(this->context->getContextToken()) + "_" +	std::to_string(this->get_id()) +	"_" +	nodes_to_send[i].id());
-
-			ral::cache::MetadataDictionary metadata;
-			metadata.add_value(ral::cache::KERNEL_ID_METADATA_LABEL, std::to_string(this->get_id()));
-			metadata.add_value(ral::cache::QUERY_ID_METADATA_LABEL, std::to_string(this->context->getContextToken()));
-			metadata.add_value(ral::cache::ADD_TO_SPECIFIC_CACHE_METADATA_LABEL, "false");
-			metadata.add_value(ral::cache::CACHE_ID_METADATA_LABEL, "");
-			metadata.add_value(ral::cache::SENDER_WORKER_ID_METADATA_LABEL, self_node.id() );
-			metadata.add_value(ral::cache::MESSAGE_ID, "determine_if_we_are_scattering_a_small_table_" +
-																								metadata.get_values()[ral::cache::QUERY_ID_METADATA_LABEL] + "_" +
-																								metadata.get_values()[ral::cache::KERNEL_ID_METADATA_LABEL] +	"_" +
-																								metadata.get_values()[ral::cache::SENDER_WORKER_ID_METADATA_LABEL]);
-			metadata.add_value(ral::cache::WORKER_IDS_METADATA_LABEL, nodes_to_send[i].id());
-			metadata.add_value(ral::cache::JOIN_LEFT_BYTES_METADATA_LABEL, std::to_string(left_bytes_estimate));
-			metadata.add_value(ral::cache::JOIN_RIGHT_BYTES_METADATA_LABEL, std::to_string(right_bytes_estimate));
-			output_cache->addCacheData(std::make_unique<ral::cache::GPUCacheDataMetaData>(ral::utilities::create_empty_table({}, {}), metadata),"",true);
 		}
+		ral::cache::MetadataDictionary metadata;
+		metadata.add_value(ral::cache::KERNEL_ID_METADATA_LABEL, std::to_string(this->get_id()));
+		metadata.add_value(ral::cache::QUERY_ID_METADATA_LABEL, std::to_string(this->context->getContextToken()));
+		metadata.add_value(ral::cache::ADD_TO_SPECIFIC_CACHE_METADATA_LABEL, "false");
+		metadata.add_value(ral::cache::CACHE_ID_METADATA_LABEL, "");
+		metadata.add_value(ral::cache::SENDER_WORKER_ID_METADATA_LABEL, self_node.id() );
+		metadata.add_value(ral::cache::MESSAGE_ID, "determine_if_we_are_scattering_a_small_table_" +
+																							metadata.get_values()[ral::cache::QUERY_ID_METADATA_LABEL] + "_" +
+																							metadata.get_values()[ral::cache::KERNEL_ID_METADATA_LABEL] +	"_" +
+																							metadata.get_values()[ral::cache::SENDER_WORKER_ID_METADATA_LABEL]);
+		metadata.add_value(ral::cache::WORKER_IDS_METADATA_LABEL, worker_ids_metadata);
+		metadata.add_value(ral::cache::JOIN_LEFT_BYTES_METADATA_LABEL, std::to_string(left_bytes_estimate));
+		metadata.add_value(ral::cache::JOIN_RIGHT_BYTES_METADATA_LABEL, std::to_string(right_bytes_estimate));
+		output_cache->addCacheData(std::make_unique<ral::cache::GPUCacheDataMetaData>(ral::utilities::create_empty_table({}, {}), metadata),"",true);
 
 		logger->trace("{query_id}|{step}|{substep}|{info}|{duration}|kernel_id|{kernel_id}||",
 									"query_id"_a=context->getContextToken(),
@@ -793,7 +792,7 @@ public:
 		std::unique_ptr<ral::frame::BlazingTable> right_batch,
 		BatchSequence left_sequence,
 		BatchSequence right_sequence){
-		using ColumnDataPartitionMessage = ral::communication::messages::ColumnDataPartitionMessage;
+
 
 		this->context->incrementQuerySubstep();
 
@@ -824,23 +823,6 @@ public:
 			this->logger.get(),
 		  LEFT_TABLE_IDX);
 
-		// BlazingThread left_consumer([context = this->context, this](){
-		// 	ExternalBatchColumnDataSequence<ColumnDataPartitionMessage> external_input_left(this->context, this->get_message_id(), this);
-		// 	std::unique_ptr<ral::frame::BlazingHostTable> host_table;
-
-		// 	while (host_table = external_input_left.next()) {
-		// 		this->add_to_output_cache(std::move(host_table), "output_a");
-		// 	}
-		// });
-
-		distribute_left_thread.join();
-		int total_count_left = node_count_left[self_node.id()];
-		for (auto message : messages_to_wait_for_left){
-			auto meta_message = this->query_graph->get_input_message_cache()->pullCacheData(message);
-			total_count_left += std::stoi(static_cast<ral::cache::GPUCacheDataMetaData *>(meta_message.get())->getMetadata().get_values()[ral::cache::PARTITION_COUNT]);
-		}
-		this->output_.get_cache("output_a")->wait_for_count(total_count_left);
-
 		std::map<std::string, int> node_count_right;
 		std::vector<std::string> messages_to_wait_for_right;
 		BlazingMutableThread distribute_right_thread(&JoinPartitionKernel::partition_table, std::to_string(this->get_id()), this->context.get(),
@@ -853,16 +835,17 @@ public:
 			this->logger.get(),
 			RIGHT_TABLE_IDX);
 
-		// create thread with ExternalBatchColumnDataSequence for the right table being distriubted
-		// BlazingThread right_consumer([cloned_context, this](){
-		// 	ExternalBatchColumnDataSequence<ColumnDataPartitionMessage> external_input_right(cloned_context, this->get_message_id(), this);
-		// 	std::unique_ptr<ral::frame::BlazingHostTable> host_table;
 
-		// 	while (host_table = external_input_right.next()) {
-		// 		this->add_to_output_cache(std::move(host_table), "output_b");
-		// 	}
-		// });
+		distribute_left_thread.join();
 		distribute_right_thread.join();
+
+		int total_count_left = node_count_left[self_node.id()];
+		for (auto message : messages_to_wait_for_left){
+			auto meta_message = this->query_graph->get_input_message_cache()->pullCacheData(message);
+			total_count_left += std::stoi(static_cast<ral::cache::GPUCacheDataMetaData *>(meta_message.get())->getMetadata().get_values()[ral::cache::PARTITION_COUNT]);
+		}
+		this->output_.get_cache("output_a")->wait_for_count(total_count_left);
+
 		int total_count_right = node_count_right[self_node.id()];
 		for (auto message : messages_to_wait_for_right){
 			auto meta_message = this->query_graph->get_input_message_cache()->pullCacheData(message);
@@ -876,7 +859,6 @@ public:
 		BatchSequence small_table_sequence,
 		BatchSequenceBypass big_table_sequence,
 		const std::pair<bool, bool> & scatter_left_right){
-		using ColumnDataMessage = ral::communication::messages::ColumnDataMessage;
 
 		this->context->incrementQuerySubstep();
 
@@ -899,22 +881,29 @@ public:
 
 						int self_node_idx = context->getNodeIndex(self_node);
 						auto nodes_to_send = context->getAllOtherNodes(self_node_idx);
+						std::string worker_ids_metadata;
 						auto output_cache = this->query_graph->get_output_message_cache();
 						for (auto i = 0; i < nodes_to_send.size(); i++)	{
-							ral::cache::MetadataDictionary metadata;
-							metadata.add_value(ral::cache::KERNEL_ID_METADATA_LABEL, std::to_string(this->get_id()));
-							metadata.add_value(ral::cache::QUERY_ID_METADATA_LABEL, std::to_string(this->context->getContextToken()));
-							metadata.add_value(ral::cache::ADD_TO_SPECIFIC_CACHE_METADATA_LABEL, "true");
-							metadata.add_value(ral::cache::CACHE_ID_METADATA_LABEL, small_output_cache_name);
-							metadata.add_value(ral::cache::SENDER_WORKER_ID_METADATA_LABEL, self_node.id());
-							metadata.add_value(ral::cache::WORKER_IDS_METADATA_LABEL, nodes_to_send[i].id());
-							bool added = output_cache->addCacheData(std::make_unique<ral::cache::GPUCacheDataMetaData>(small_table_batch->toBlazingTableView().clone(), metadata),"",true);
-							if (added) {
+							worker_ids_metadata += nodes_to_send[i].id();
+							if (i < nodes_to_send.size() - 1) {
+								worker_ids_metadata += ",";
+							}
+						}
+						ral::cache::MetadataDictionary metadata;
+						metadata.add_value(ral::cache::KERNEL_ID_METADATA_LABEL, std::to_string(this->get_id()));
+						metadata.add_value(ral::cache::QUERY_ID_METADATA_LABEL, std::to_string(this->context->getContextToken()));
+						metadata.add_value(ral::cache::ADD_TO_SPECIFIC_CACHE_METADATA_LABEL, "true");
+						metadata.add_value(ral::cache::CACHE_ID_METADATA_LABEL, small_output_cache_name);
+						metadata.add_value(ral::cache::SENDER_WORKER_ID_METADATA_LABEL, self_node.id());
+						metadata.add_value(ral::cache::WORKER_IDS_METADATA_LABEL, worker_ids_metadata);
+						bool added = output_cache->addCacheData(std::make_unique<ral::cache::GPUCacheDataMetaData>(small_table_batch->toBlazingTableView().clone(), metadata),"",false);
+						if (added) {
+							for (auto i = 0; i < nodes_to_send.size(); i++)	{
 								node_count[nodes_to_send[i].id()]++;
 							}
 						}
 
-						bool added = this->output_.get_cache(small_output_cache_name).get()->addToCache(std::move(small_table_batch),"",true);
+						added = this->output_.get_cache(small_output_cache_name).get()->addToCache(std::move(small_table_batch),"",false);
 						if (added) {
 							node_count[self_node.id()]++;
 						}
@@ -937,7 +926,6 @@ public:
 					throw;
 				}
 			}
-			// ral::distribution::notifyLastTablePartitions(this->context.get(), ColumnDataMessage::MessageID());
 
 			auto nodes = context->getAllNodes();
 			for(std::size_t i = 0; i < nodes.size(); ++i) {
@@ -965,14 +953,14 @@ public:
 			}
 		});
 
-		// BlazingThread collect_small_table_thread([this, small_output_cache_name](){
-		// 	ExternalBatchColumnDataSequence<ColumnDataMessage> external_input_left(this->context, this->get_message_id(), this);
+		this->add_to_output_cache(std::move(big_table_batch), big_output_cache_name);
+		BlazingThread big_table_passthrough_thread([this, &big_table_sequence, big_output_cache_name](){
+			while (big_table_sequence.wait_for_next()) {
+				auto batch = big_table_sequence.next();
+				this->add_to_output_cache(std::move(batch), big_output_cache_name);
+			}
+		});
 
-		// 	while (external_input_left.wait_for_next()) {
-		// 		std::unique_ptr<ral::frame::BlazingHostTable> host_table = external_input_left.next();
-		// 		this->add_to_output_cache(std::move(host_table), small_output_cache_name);
-		// 	}
-		// });
 		distribute_small_table_thread.join();
 		auto& self_node = ral::communication::CommunicationData::getInstance().getSelfNode();
  		int total_count = node_count[self_node.id()];
@@ -982,16 +970,6 @@ public:
 		}
 		this->output_cache(small_output_cache_name)->wait_for_count(total_count);
 
-		this->add_to_output_cache(std::move(big_table_batch), big_output_cache_name);
-		BlazingThread big_table_passthrough_thread([this, &big_table_sequence, big_output_cache_name](){
-			while (big_table_sequence.wait_for_next()) {
-				auto batch = big_table_sequence.next();
-				this->add_to_output_cache(std::move(batch), big_output_cache_name);
-			}
-		});
-
-
-		// collect_small_table_thread.join();
 		big_table_passthrough_thread.join();
 	}
 

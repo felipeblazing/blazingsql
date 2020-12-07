@@ -207,6 +207,16 @@ public:
 	void set_values(std::map<std::string,std::string> new_values){
 		this->values= new_values;
 	}
+
+	/**
+	* Checks if metadata has a specific key
+	* @param key The key to check if is in the metadata
+	* @return true if the key is in the metadata, otherwise return false
+	*/
+	bool has_value(std::string key){
+		auto it = this->values.find(key);
+		return it != this->values.end();
+	}
 private:
 	std::map<std::string,std::string> values; /**< Stores the mapping of metdata label to metadata value */
 };
@@ -581,7 +591,7 @@ public:
 
 		CodeTimer blazing_timer;
 		std::unique_lock<std::mutex> lock(mutex_);
-		while(!condition_variable_.wait_for(lock, timeout*1ms, [&, this] {
+		/*while(!condition_variable_.wait_for(lock, timeout*1ms, [&, this] {
 				bool done_waiting = this->finished.load(std::memory_order_seq_cst) or !this->empty();
 				if (!done_waiting && blazing_timer.elapsed_time() > 59000){
 					auto logger = spdlog::get("batch_logger");
@@ -592,8 +602,11 @@ public:
 					}
 				}
 				return done_waiting;
-			})){}
+			})){}*/
 
+		condition_variable_.wait(lock,[&, this] {
+				return this->finished.load(std::memory_order_seq_cst) or !this->empty();
+		});
 		if(this->message_queue_.size() == 0) {
 			return nullptr;
 		}
@@ -769,6 +782,14 @@ public:
 	}
 
 	/**
+	 * gets all the messages
+	 */
+	std::vector<message_ptr> get_all(){
+		std::unique_lock<std::mutex> lock(mutex_);
+		return get_all_unsafe();
+	}
+
+	/**
 	* Waits until all messages are ready then returns all of them.
 	* You should never call this function more than once on a WaitingQueue else
 	* race conditions can occur.
@@ -826,6 +847,11 @@ public:
 	}
 
 
+	void put_all(std::vector<message_ptr> messages){
+		std::unique_lock<std::mutex> lock(mutex_);
+		put_all_unsafe(std::move(messages));
+		condition_variable_.notify_all();
+	}
 private:
 	/**
 	* Checks if the WaitingQueue is empty.
@@ -868,8 +894,6 @@ class CacheMachine {
 public:
 	CacheMachine(std::shared_ptr<Context> context);
 
-	CacheMachine(std::shared_ptr<Context> context, std::size_t flow_control_bytes_threshold);
-
 	~CacheMachine();
 
 	virtual void put(size_t message_id, std::unique_ptr<ral::frame::BlazingTable> table);
@@ -907,6 +931,11 @@ public:
 	}
 	virtual std::unique_ptr<ral::frame::BlazingTable> pullFromCache();
 
+	std::vector<std::unique_ptr<ral::cache::CacheData> > pull_all_cache_data();
+
+	void put_all_cache_data( std::vector<std::unique_ptr<ral::cache::CacheData> > messages, std::vector<std::string> message_ids);
+
+	
 
 	virtual std::unique_ptr<ral::cache::CacheData> pullCacheData(std::string message_id);
 
@@ -914,10 +943,6 @@ public:
 
 
 	virtual std::unique_ptr<ral::cache::CacheData> pullCacheData();
-
-	bool thresholds_are_met(std::size_t bytes_count);
-
-	virtual void wait_if_cache_is_saturated();
 
 	void wait_for_count(int count){
 		return this->waitingCache->wait_for_count(count);
@@ -943,12 +968,6 @@ protected:
 	std::shared_ptr<spdlog::logger> logger;
 	std::shared_ptr<spdlog::logger> cache_events_logger;
 	const std::size_t cache_id;
-
-	std::size_t flow_control_bytes_threshold;
-	std::size_t flow_control_bytes_count;
-	std::mutex flow_control_mutex;
-	std::condition_variable flow_control_condition_variable;
-
 };
 
 /**
@@ -1053,7 +1072,7 @@ class ConcatenatingCacheMachine : public CacheMachine {
 public:
 	ConcatenatingCacheMachine(std::shared_ptr<Context> context);
 
-	ConcatenatingCacheMachine(std::shared_ptr<Context> context, std::size_t flow_control_bytes_threshold, 
+	ConcatenatingCacheMachine(std::shared_ptr<Context> context, 
 			std::size_t concat_cache_num_bytes, bool concat_all);
 
 	~ConcatenatingCacheMachine() = default;

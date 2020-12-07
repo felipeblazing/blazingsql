@@ -19,6 +19,39 @@ namespace io{
 namespace comm {
 
 
+
+class ucp_progress_manager{
+
+public:
+
+   	static ucp_progress_manager * get_instance(ucp_worker_h ucp_worker, size_t request_size);
+    static ucp_progress_manager * get_instance();
+    void add_recv_request(char * request, std::function<void()> callback);
+    void add_send_request(char * request, std::function<void()> callback);
+private:
+   struct request_struct{
+        char * request;
+        std::function<void()> callback;
+        bool operator <(const request_struct & other) const{
+            return request < other.request;
+        }
+    };
+    ucp_progress_manager(ucp_worker_h ucp_worker,size_t request_size);
+   	ucp_progress_manager(ucp_progress_manager &&) = delete;
+	ucp_progress_manager(const ucp_progress_manager &) = delete;
+	ucp_progress_manager & operator=(ucp_progress_manager &&) = delete;
+	ucp_progress_manager & operator=(const ucp_progress_manager &) = delete;
+    size_t _request_size;
+    std::mutex request_mutex;
+    std::condition_variable cv;
+    std::set<request_struct> send_requests;
+    std::set<request_struct> recv_requests;
+    ucp_worker_h ucp_worker;
+    void check_progress();
+};
+
+
+
 enum class status_code {
 	INVALID = -1,
 	OK = 1,
@@ -67,8 +100,6 @@ public:
     ~ucx_buffer_transport();
 
     void send_begin_transmission() override;
-    void increment_frame_transmission() override;
-	void increment_begin_transmission() override;
 
 protected:
     void send_impl(const char * buffer, size_t buffer_size) override;
@@ -117,6 +148,7 @@ private:
     int message_id;
     std::vector<int> socket_fds;
     ctpl::thread_pool<BlazingThread> * allocate_copy_buffer_pool;
+    cudaStream_t stream;
 };
 
 

@@ -14,9 +14,9 @@ class kernel;
 static std::shared_ptr<ral::cache::CacheMachine> create_cache_machine( const cache_settings& config) {
 	std::shared_ptr<ral::cache::CacheMachine> machine;
 	if (config.type == CacheType::SIMPLE or config.type == CacheType::FOR_EACH) {
-		machine =  std::make_shared<ral::cache::CacheMachine>(config.context, config.flow_control_bytes_threshold);
+		machine =  std::make_shared<ral::cache::CacheMachine>(config.context);
 	} else if (config.type == CacheType::CONCATENATING) {
-		machine =  std::make_shared<ral::cache::ConcatenatingCacheMachine>(config.context, config.flow_control_bytes_threshold, 
+		machine =  std::make_shared<ral::cache::ConcatenatingCacheMachine>(config.context, 
 			config.concat_cache_num_bytes, config.concat_all);
 	}
 	return machine;
@@ -55,6 +55,7 @@ public:
 		container_[head_id_] = nullptr;	 // sentinel node
 		kernels_edges_logger = spdlog::get("kernels_edges_logger");
 	}
+	~graph() {}
 	graph(const graph &) = default;
 	graph & operator=(const graph &) = default;
 
@@ -104,6 +105,7 @@ public:
 
 	void check_for_simple_scan_with_limit_query();
 	void set_memory_monitor(std::shared_ptr<ral::MemoryMonitor> mem_monitor);
+	void clear_kernels(); 
 private:
 	const std::int32_t head_id_{-1};
 	std::vector<kernel *> kernels_;

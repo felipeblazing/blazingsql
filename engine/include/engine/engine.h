@@ -10,7 +10,7 @@
 #include "../../src/error.hpp"
 
 std::shared_ptr<ral::cache::graph> runGenerateGraph(int32_t masterIndex,
-	std::vector<NodeMetaDataTCP> tcpMetadata,
+	std::vector<std::string> worker_ids,
 	std::vector<std::string> tableNames,
 	std::vector<std::string> tableScans,
 	std::vector<TableSchema> tableSchemas,
@@ -22,9 +22,10 @@ std::shared_ptr<ral::cache::graph> runGenerateGraph(int32_t masterIndex,
 	std::string query,
 	uint64_t accessToken,
 	std::vector<std::vector<std::map<std::string, std::string>>> uri_values,
-	std::map<std::string, std::string> config_options);
+	std::map<std::string, std::string> config_options,
+	std::string sql);
 
-std::unique_ptr<PartitionedResultSet> runExecuteGraph(std::shared_ptr<ral::cache::graph> graph);
+std::unique_ptr<PartitionedResultSet> runExecuteGraph(std::shared_ptr<ral::cache::graph> graph, int ctx_token);
 
 TableScanInfo getTableScanInfo(std::string logicalPlan);
 
@@ -33,16 +34,9 @@ std::unique_ptr<ResultSet> runSkipData(
 	std::vector<std::string> all_column_names,
 	std::string query);
 
-std::unique_ptr<ResultSet> performPartition(
-	int32_t masterIndex,
-	std::vector<NodeMetaDataTCP> tcpMetadata,
-	int32_t ctxToken,
-	const ral::frame::BlazingTableView & table,
-	std::vector<std::string> column_names);
 
 extern "C" {
 std::pair<std::unique_ptr<PartitionedResultSet>, error_code_t> runQuery_C(int32_t masterIndex,
-	std::vector<NodeMetaDataTCP> tcpMetadata,
 	std::vector<std::string> tableNames,
 	std::vector<std::string> tableScans,
 	std::vector<TableSchema> tableSchemas,
@@ -63,10 +57,5 @@ std::pair<std::unique_ptr<ResultSet>, error_code_t> runSkipData_C(
 	std::vector<std::string> all_column_names, 
 	std::string query);
 
-std::pair<std::unique_ptr<ResultSet>, error_code_t> performPartition_C(
-	int32_t masterIndex,
-	std::vector<NodeMetaDataTCP> tcpMetadata,
-	int32_t ctxToken,
-	const ral::frame::BlazingTableView & table,
-	std::vector<std::string> column_names);
+
 } // extern "C"

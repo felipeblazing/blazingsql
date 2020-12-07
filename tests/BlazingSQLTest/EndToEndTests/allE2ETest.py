@@ -48,6 +48,7 @@ from EndToEndTests import (
     tablesFromPandasTest,
     # timestampdiffTest,
     timestampTest,
+    toTimestampTest,
     tpchQueriesTest,
 )
 from EndToEndTests import unaryOpsTest as unaryOpsTest
@@ -130,6 +131,9 @@ def main():
 
     if runAllTests or ("timestampTest" in targetTestGroups):
         timestampTest.main(dask_client, drill, spark, dir_data_file, bc, nRals)
+
+    if runAllTests or ("toTimestampTest" in targetTestGroups):
+        toTimestampTest.main(dask_client, spark, dir_data_file, bc, nRals)
 
     if runAllTests or ("fullOuterJoinsTest" in targetTestGroups):
         fullOuterJoinsTest.main(dask_client, drill, dir_data_file, bc, nRals)
@@ -233,7 +237,7 @@ def main():
         fileSystemLocalTest.main(dask_client, drill, dir_data_file, bc, nRals)
 
     if runAllTests or ("messageValidationTest" in targetTestGroups):
-        messageValidationTest.main(dask_client, drill, dir_data_file, bc, nRals) 
+        messageValidationTest.main(dask_client, drill, dir_data_file, bc, nRals)
 
     if Settings.execution_mode != ExecutionMode.GPUCI:
         if runAllTests or ("fileSystemS3Test" in targetTestGroups):
@@ -290,11 +294,10 @@ if __name__ == "__main__":
         # an error comparing with historic results
         # TODO william kharoly felipe we should try to enable and
         # use this function in the future
-        result = True
         if result is False:
             for error_msg in error_msgs:
                 print(error_msg)
-            # import sys
+            import sys
 
             end = time.time()  # in seconds
             elapsed = end - start  # in seconds
@@ -313,4 +316,4 @@ if __name__ == "__main__":
             # TODO percy kharo willian: uncomment this line
             # when gpuci has all the env vars set
             # return error exit status to the command prompt (shell)
-            # sys.exit(1)
+            sys.exit(1)

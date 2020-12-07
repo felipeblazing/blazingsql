@@ -6,10 +6,10 @@
 
 #include "CalciteExpressionParsing.h"
 #include "CodeTimer.h"
-#include "communication/network/Server.h"
+
 #include "operators/OrderBy.h"
 #include "utilities/CommonOperations.h"
-#include "utilities/StringUtils.h"
+
 
 #include "execution_graph/logic_controllers/LogicalFilter.h"
 #include "execution_graph/logic_controllers/LogicalProject.h"
@@ -120,7 +120,6 @@ std::shared_ptr<ral::cache::graph> generate_graph(std::vector<ral::io::data_load
 std::vector<std::unique_ptr<ral::frame::BlazingTable>> execute_graph(std::shared_ptr<ral::cache::graph> graph) {
 	CodeTimer blazing_timer;
 	auto logger = spdlog::get("batch_logger");
-	std::cout<<logger<<std::endl;
 	uint32_t context_token = graph->get_last_kernel()->get_context()->getContextToken();
 
 	try {
