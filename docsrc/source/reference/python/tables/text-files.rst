@@ -31,7 +31,7 @@ Parameters
 * **na_values** - list of strings, **Optional.** Values to consider as *invalid*. **Default:** ``None``
 * **keep_default_na** - boolean, **Optional.** Speficies whether or not to include the default *NaN* values when parsing the data. **Default:** ``True``
 * **na_filter** - boolean, **Optional.** Detect missing values (empty strings and the values in *na_values*). Passing *False* can improve performance. **Default:** ``True``
-* **quotechar** - character, **Optional.**Start and end of quote item indicator. **Default:** ``‘”’``
+* **quotechar** - character, **Optional.** Start and end of quote item indicator. **Default:** ``‘”’``
 * **quoting** - integer, **Optional.** Controls quoting behavior. Use one of QUOTE_MINIMAL (0), QUOTE_ALL (1), QUOTE_NONNUMERIC (2) or QUOTE_NONE (3). Quoting is enabled with all values except 3. **Default:** ``0``
 * **doublequote** - boolean, **Optional.** When quoting is enabled (not QUOTE_NONE), indicates whether to interpret two consecutive quotechar inside fields as single quotechar. **Default:** ``True``
 * **comment** - character, **Optional.** Character used as a comments indicator. If found at the beginning of a line, the line will be ignored altogether. **Default:** ``None``
