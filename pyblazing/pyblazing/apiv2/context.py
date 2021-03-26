@@ -1253,38 +1253,46 @@ class BlazingContext(object):
     Parameters
     ----------
 
-    :param dask_client: ``Client`` object from ``dask.distributed``. 
+    :param dask_client: 
         The dask client used for 
         communicating with other nodes. This is only necessary for running BlazingSQL with 
         multiple nodes. 
         **Default:** ``"autocheck"``
-    :param network_interface: string. 
+    :type dask_client: ``Client`` object from ``dask.distributed``
+    :param network_interface: 
         Network interface used for communicating with the 
         dask-scheduler. 
         **Default:** ``None``. See note below.
-    :param allocator: string, allowed options are ``"default"``, ``"managed"`` or ``'existing'``.
+    :type network_interface: string
+    :param allocator:
         Where ``"managed"`` uses Unified Virtual Memory (UVM) and may use system memory 
         if GPU memory runs out, or ``"existing"`` where it assumes you have already set the
         rmm allocator and therefore does not initialize it (this is for advanced users.)
         **Default:** ``"default"``
-    :param pool: boolean. 
+    :type allocator: string, allowed options are ``"default"``, ``"managed"`` or ``"existing"``
+    :param pool:
         If ``True``, allocate a memory pool in the beginning. This can greatly improve performance.
         **Default:** ``False``
-    :param initial_pool_size: long integer.
+    :type pool: boolean
+    :param initial_pool_size:
         Initial size of memory pool in bytes (if pool=True). If ``None``, it 
         will default to using half of the GPU memory.
         **Default:** ``None``
-    :param maximum_pool_size: long integer. 
+    :type initial_pool_size: long integer
+    :param maximum_pool_size:
         Maximum size of the pool.
         **Default:** ``None``
-    :param enable_logging: boolean. 
+    :type maximum_pool_size: long integer 
+    :param enable_logging:
         If set to ``True`` the memory allocator logging will be enabled.
         This can negatively impact performance and is aimed at advanced users.
         **Default:** ``False``
-    :param enable_progress_bar: boolean. 
+    :type enable_logging: boolean
+    :param enable_progress_bar:
         Set to ``True`` to display a progress bar during query executions.
         **Default:** ``False``
-    :param config_options: dictionary. 
+    :type enable_progress_bar: boolean
+    :param config_options:
         A dictionary for setting certain parameters in the engine. **Default:** ``{}``
         List of options:
             JOIN_PARTITION_SIZE_THRESHOLD: long integer 
@@ -1423,7 +1431,7 @@ class BlazingContext(object):
                 by default it will be set by whatever dask client is using (``'tcp'``, ``'ucx'``, ..).
                 **NOTE:** This parameter only works when used in the BlazingContext.
                 **Default:** ``'tcp'``
-        
+    :type config_options: dictionary
 
     .. note:: When using BlazingSQL with multiple nodes, you will need to set the 
         correct ``network_interface`` your servers are using to communicate with the 
@@ -1432,6 +1440,7 @@ class BlazingContext(object):
         is set to ``'eth0'``.
 
     :return: ``BlazingContext`` object
+    :rtype: :class:`blazingsql.BlazingContext`
     """
 
 
@@ -1447,6 +1456,9 @@ class BlazingContext(object):
         enable_progress_bar=False,
         config_options={},
     ):
+        """ 
+            Initialize :class:`blazingsql.BlazingContext`
+        """
         self.lock = Lock()
         self.finalizeCaller = cio.finalizeCaller
         self.nodes = []
@@ -1991,31 +2003,36 @@ class BlazingContext(object):
         """
         Create a BlazingSQL table.
 
-        Parameters
-        ----------
-
-        :param table_name: string. 
+        :param table_name:
             Name of the table.
-        :param input: object or string. 
+        :type table_name: string
+        :param input:
             Data source for table.
-            This can be cudf.Dataframe, dask_cudf.DataFrame, pandas.DataFrame,
+            This can be ``cudf.Dataframe``, ``dask_cudf.DataFrame``, ``pandas.DataFrame``,
             filepath for csv, orc, parquet, etc...
-        :param file_format (optional): string. 
+        :type input: ``cudf.Dataframe``, ``dask_cudf.DataFrame``, ``pandas.DataFrame`` object 
+            or string
+        :param file_format:
             Describes the file format
             (e.g. ``"csv"``, ``"orc"``, ``"parquet"``) this field must
             only be set if the files do not have an extension.
-        :param local_files (optional): boolean. 
+            **Default:** inferred from file extension
+        :type file_format (optional): string, optional
+        :param local_files:
             Must be set to ``True`` if workers
             only have access to a subset of the files
             belonging to the same table. In such a case,
             each worker will load their corresponding partitions.
-        :param get_metadata (optional): boolean.
+        :type local_files: boolean, optional
+        :param get_metadata:
             To use parquet and orc metadata
-            it defaults to ``True`. When set to ``False`` it will skip
+            it defaults to ``True``. When set to ``False`` it will skip
             the process of getting metadata.
+        :type get_metadata: boolean, optional
 
-        Examples
-        --------
+        .. raw:: html
+        
+            <h2>Examples</h2>
 
         Create table from cudf.DataFrame:
 
@@ -2454,7 +2471,9 @@ class BlazingContext(object):
         Parameters
         ----------
 
-        table_name : string of table name to drop.
+        :param table_name: string. 
+            Name of the table to drop.
+
 
         Examples
         --------
@@ -2462,10 +2481,6 @@ class BlazingContext(object):
         Drop 'taxi' table:
 
         >>> bc.drop_table('taxi')
-
-
-        Docs:
-        https://docs.blazingdb.com/docs/using-blazingsql#section-drop-tables
         """
         self.add_remove_table(table_name, False)
 
