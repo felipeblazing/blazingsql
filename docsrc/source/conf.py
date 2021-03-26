@@ -13,6 +13,7 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../../pyblazing'))
+sys.path.insert(0, os.path.abspath('../../pyblazing/blazingsql'))
 sys.setrecursionlimit(1500)
 
 # -- Project information -----------------------------------------------------
@@ -148,10 +149,14 @@ html_context = {
     "doc_path": "docsrc/source",
 }
 
+skip_methods = ['add_remove_table', 'partition', 'do_progress_bar', 'localfs']
+
 def skip(app, what, name, obj, would_skip, options):
     if name == "__init__":
         return True
     elif name[0] == '_':
+        return True
+    elif name in skip_methods:
         return True
     return would_skip
 
