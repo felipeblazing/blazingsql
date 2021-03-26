@@ -1795,7 +1795,8 @@ class BlazingContext(object):
         Parameters
         ----------
 
-        sql : string SQL query.
+        :param sql: string.
+            The SQL query.
 
         Examples
         --------
@@ -1817,8 +1818,6 @@ class BlazingContext(object):
           BindableTableScan(table=[[main, taxi_2]],
                     filters=[[OR(<($12, 100), <>($3, 4))]])
 
-
-        Docs: https://docs.blazingdb.com/docs/explain
         """
         self.lock.acquire()
         try:
@@ -1995,20 +1994,25 @@ class BlazingContext(object):
         Parameters
         ----------
 
-        table_name : string of table name.
-        input : data source for table.
-                cudf.Dataframe, dask_cudf.DataFrame, pandas.DataFrame,
-                filepath for csv, orc, parquet, etc...
-        file_format (optional) : string describing the file format
-                      (e.g. "csv", "orc", "parquet") this field must
-                      only be set if the files do not have an extension.
-        local_files (optional) : boolean, must be set to True if workers
-                      only have access to a subset of the files
-                      belonging to the same table. In such a case,
-                      each worker will load their corresponding partitions.
-        get_metadata (optional) : boolean, to use parquet and orc metadata,
-                      defaults to True. When set to False it will skip
-                      the process of getting metadata.
+        :param table_name: string. 
+            Name of the table.
+        :param input: object or string. 
+            Data source for table.
+            This can be cudf.Dataframe, dask_cudf.DataFrame, pandas.DataFrame,
+            filepath for csv, orc, parquet, etc...
+        :param file_format (optional): string. 
+            Describes the file format
+            (e.g. ``"csv"``, ``"orc"``, ``"parquet"``) this field must
+            only be set if the files do not have an extension.
+        :param local_files (optional): boolean. 
+            Must be set to ``True`` if workers
+            only have access to a subset of the files
+            belonging to the same table. In such a case,
+            each worker will load their corresponding partitions.
+        :param get_metadata (optional): boolean.
+            To use parquet and orc metadata
+            it defaults to ``True`. When set to ``False`` it will skip
+            the process of getting metadata.
 
         Examples
         --------
@@ -2038,9 +2042,6 @@ class BlazingContext(object):
         >>> bc.create_table('taxi',
         >>>     's3://blazingsql-colab/yellow_taxi/1_0_0.parquet')
         <pyblazing.apiv2.context.BlazingTable at 0x7f09264c0310>
-
-
-        Docs: https://docs.blazingdb.com/docs/create_table
         """
 
         kwargs_validation(kwargs, "create_table")
