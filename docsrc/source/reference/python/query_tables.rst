@@ -153,6 +153,7 @@ Single Node - Multiple GPU with ``LocalCUDACluster``
 ''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 .. code-block:: python
+
     from blazingsql import BlazingContext
     from dask_cuda import LocalCUDACluster
     from dask.distributed import Client
