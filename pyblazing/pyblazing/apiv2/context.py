@@ -1668,38 +1668,47 @@ class BlazingContext(object):
         """
         Register a Hadoop Distributed File System (HDFS) Cluster.
 
-        Parameters
-        ----------
-
-        name : string that represents the name with which you will refer to
-            your HDFS cluster.
-        host : string IP Address of your HDFS NameNode.
-        port : integer of the Port number of your HDFS NameNode.
-        user : string of the HDFS User on your NameNode.
-        kerb_ticket (optional) : string file path to your ticket for
+        :param name: Name to register with :class:`BlazingContext`
+            to represent the connected HDFS cluster.
+        :type name: string
+        :param host: 
+            IP Address of the HDFS NameNode.
+        :type host: string
+        :param port: 
+            Port number of the HDFS NameNode.
+        :type port: integer
+        :param user:
+            HDFS User on the NameNode.
+        :type user: string
+        :param kerb_ticket:  
+            file path to your ticket for
             kerberos authentication.
+        :type kerb_ticket: string
 
         You may also need to set the following environment variables to
         properly interface with HDFS.
-        HADOOP_HOME: the root of your installed Hadoop distribution.
-        JAVA_HOME: the location of your Java SDK installation
-            (should point to CONDA_PREFIX).
-        ARROW_LIBHDFS_DIR: explicit location of libhdfs.so if not installed
-            at $HADOOP_HOME/lib/native.
-        CLASSPATH: must contain the Hadoop jars.
+            
+            HADOOP_HOME : 
+                the root of your installed Hadoop distribution.
+            JAVA_HOME : 
+                the location of your Java SDK installation
+                (should point to ``CONDA_PREFIX``).
+            ARROW_LIBHDFS_DIR : 
+                explicit location of libhdfs.so if not installed
+                at ``$HADOOP_HOME/lib/native``.
+            CLASSPATH : 
+                must contain the Hadoop jars.
 
-        Examples
-        --------
+        .. raw:: html
 
+            <h2>Examples</h2>
+        
         Register and create table from HDFS:
 
         >>> bc.hdfs('dir_name', host='name_node_ip', port=port_number,
             user='hdfs_user')
         >>> bc.create_table('table_name', 'hdfs://dir_name/file.csv')
         <pyblazing.apiv2.context.BlazingTable at 0x7f11897c0310>
-
-
-        Docs: https://docs.blazingdb.com/docs/hdfs
         """
         kwargs_validation(kwargs, "hdfs")
         return self.fs.hdfs(self.dask_client, prefix, **kwargs)
@@ -1708,25 +1717,38 @@ class BlazingContext(object):
         """
         Register an AWS S3 bucket.
 
-        Parameters
-        ----------
-
-        name : string that represents the name with which you will refer to
-            your S3 bucket.
-        bucket_name : string name of your S3 bucket.
-        access_key_id : string of your AWS IAM access key. not required for
+        :param name: 
+            Name to register with :class:`BlazingContext`
+            to represent the connected S3 bucket.
+        :type name: string
+        :param bucket_name:
+            Name of the S3 bucket.
+        :type bucket_name: string
+        :param access_key_id:
+            AWS IAM access key. Not required for
             public buckets.
-        secret_key : string of your AWS IAM secret key. not required for
+        :type access_key_id: string
+        :param secret_key:
+            AWS IAM secret key. Not required for
             public buckets.
-        encryption_type (optional) : None (default), 'AES_256', or 'AWS_KMS'.
-        session_token (optional) : string of your AWS IAM session token.
-        root (optional) : string path of your bucket that will be used as a
+        :type secret_key: string of your 
+        :param encryption_type: 
+            None (default), 'AES_256', or 'AWS_KMS'.
+        :type encryption_type: string, optional
+        :param session_token:
+            AWS IAM session token.
+        :type session_token: string, optional
+        :param root:
+            Path of the AWS S3 bucket that will be used as a
             shortcut path.
-        kms_key_amazon_resource (optional) : string value, required for KMS
-            encryption only.
+        :type root: string, optional
+        :param kms_key_amazon_resource: 
+            Required for KMS encryption only.
+        :type kms_key_amazon_resource: string, optional
 
-        Examples
-        --------
+        .. raw:: html
+
+            <h2>Examples</h2>
 
         Register and create table from a public S3 bucket:
 
@@ -1737,6 +1759,7 @@ class BlazingContext(object):
 
 
         Register and create table from a private S3 bucket:
+
         >>> bc.s3('other-data', bucket_name='kws-parquet-data',
         >>>    access_key_id='AKIASPFMPQMQD2OG54IQ',
         >>>    secret_key='bmt+TLTosdkIelsdw9VQjMe0nBnvAA5nPt0kaSx/Y',
@@ -1746,9 +1769,6 @@ class BlazingContext(object):
         >>> bc.create_table('taxi',
             's3://other-data/yellow_taxi/1_0_0.parquet')
         <pyblazing.apiv2.context.BlazingTable at 0x7f12327c0310>
-
-
-        Docs: https://docs.blazingdb.com/docs/s3
         """
         kwargs_validation(kwargs, "s3")
         return self.fs.s3(self.dask_client, prefix, **kwargs)
@@ -1757,20 +1777,27 @@ class BlazingContext(object):
         """
         Register a Google Storage bucket.
 
-        Parameters
-        ----------
-
-        name : string that represents the name with which you will refer to
-            your GS bucket.
-        project_id : string name of your Google Cloud Platform project.
-        bucket_name : string of the name of your GS bucket.
-        use_default_adc_json_file (optional) : boolean, whether or not to use
+        :param name:
+            Name to register with :class:`BlazingContext`
+            to represent the connected GS bucket.
+        :type name: string
+        :param project_id:
+            Name of the Google Cloud Platform project.
+        :type project_id: string
+        :param bucket_name: 
+            Name of the GS bucket.
+        :type bucket_name: string
+        :param use_default_adc_json_file:
+            Flag to indicate whether or not to use
             the default GCP ADC JSON.
-        adc_json_file (optional) : string with the location of your custom
-            ADC JSON.
+        :type use_default_adc_json_file: boolean, optional
+        :param adc_json_file:
+            Location of the custom ADC JSON.
+        :type adc_json_file: string
 
-        Examples
-        --------
+        .. raw:: html
+
+            <h2>Examples</h2>
 
         Register and create table from a GS bucket:
 
@@ -1779,14 +1806,18 @@ class BlazingContext(object):
         >>> bc.create_table('nation',
             'gs://gs_1gb/tpch_sf1/nation/0_0_0.parquet')
         <pyblazing.apiv2.context.BlazingTable at 0x7f11897c0310>
-
-
-        Docs: https://docs.blazingdb.com/docs/google-storage
         """
         kwargs_validation(kwargs, "gs")
         return self.fs.gs(self.dask_client, prefix, **kwargs)
 
     def show_filesystems(self):
+        """
+        Get a list of all files systems registered with :class:`BlazingContext`
+
+        :return: List of files systems
+        :rtype: List of files system objects
+
+        """
         print(self.fs)
 
     # END  FileSystem interface
@@ -1802,7 +1833,7 @@ class BlazingContext(object):
 
     def explain(self, sql):
         """
-        Returns break down of a given query's Logical Relational Algebra plan.
+        Get break down of a given query's Logical Relational Algebra plan.
 
         Parameters
         ----------
@@ -1810,8 +1841,12 @@ class BlazingContext(object):
         :param sql: string.
             The SQL query.
 
-        Examples
-        --------
+        :return: String representing the Logical Relational Algebra plan
+        :rtype: string
+
+        .. raw:: html
+            
+            <h2>Examples</h2>
 
         Explain this UNION query:
 
@@ -1884,16 +1919,24 @@ class BlazingContext(object):
         This function returns a dictionary which contains as
         key the gpuID and as value the free memory (bytes)
 
-        Example
-        --------
-        # single-GPU
+        :return: Dictionary where each element represents ``gpuID``
+            and value is a free memory in bytes
+        :rtype: dictionary
+
+        .. raw:: html
+
+            <h2>Examples</h2>
+
+        Single GPU
+
         >>> from blazingsql import BlazingContext
         >>> bc = BlazingContext()
         >>> free_mem = bc.get_free_memory()
         >>> print(free_mem)
                 {0: 4234220154}
 
-        # multi-GPU (4 GPUs):
+        Multiple GPUs
+
         >>> from blazingsql import BlazingContext
         >>> from dask_cuda import LocalCUDACluster
         >>> from dask.distributed import Client
@@ -1925,19 +1968,25 @@ class BlazingContext(object):
 
     def get_max_memory_used(self):
         """
-        This function returns a dictionary which contains as
-        key the gpuID and as value the max memory (bytes)
+        Get a dictionary with ``gpuID`` as key and max memory (bytes) as value
 
-        Example
-        --------
-        # single-GPU
+        :return: dictionary of max memory used
+        :rtype: dictionary of long integers
+
+        .. raw:: html
+
+            <h2>Example</h2>
+
+        Single GPU
+
         >>> from blazingsql import BlazingContext
         >>> bc = BlazingContext()
         >>> max_mem_used = bc.get_max_memory_used()
         >>> print(max_mem_used)
                 {0: 4234220154}
 
-        # multi-GPU (4 GPUs):
+        Multiple GPUs
+
         >>> from blazingsql import BlazingContext
         >>> from dask_cuda import LocalCUDACluster
         >>> from dask.distributed import Client
@@ -1971,14 +2020,18 @@ class BlazingContext(object):
         """
         This function resets the max memory usage counter to 0
 
-        Example
-        --------
-        # single-GPU
+        .. raw:: html
+
+            <h2>Example</h2>
+
+        Single GPU
+
         >>> from blazingsql import BlazingContext
         >>> bc = BlazingContext()
         >>> bc.reset_max_memory_used()
 
-        # multi-GPU (4 GPUs):
+        Multiple GPUs
+
         >>> from blazingsql import BlazingContext
         >>> from dask_cuda import LocalCUDACluster
         >>> from dask.distributed import Client
@@ -2060,6 +2113,8 @@ class BlazingContext(object):
         >>>     's3://blazingsql-colab/yellow_taxi/1_0_0.parquet')
         <pyblazing.apiv2.context.BlazingTable at 0x7f09264c0310>
         """
+
+        # TODO: redo this method to raise Exceptions rather than printing errors and returning
 
         kwargs_validation(kwargs, "create_table")
 
@@ -2485,7 +2540,7 @@ class BlazingContext(object):
 
     def list_tables(self):
         """
-        Returns a list with the names of all created tables.
+        Get a list with the names of all created tables.
 
         :return: list of names of all the tables
         :rtype: list of strings
@@ -2507,7 +2562,7 @@ class BlazingContext(object):
 
     def describe_table(self, table_name):
         """
-        Returns a dictionary with the names of all the columns and their types
+        Get a dictionary with the names of all the columns and their types
         for the specified table. A ValueError is thrown if the table is not found.
 
         :param table_name: 
@@ -2867,6 +2922,7 @@ class BlazingContext(object):
     """
 
     def partition(self, input, by=[]):
+        # TODO: remove 
         print(
             "This function has been Deprecated. It is recommended to use ddf.shuffle(on=[colnames])"
         )
@@ -2915,6 +2971,15 @@ class BlazingContext(object):
         return cio.getExecuteGraphResultCaller(graph, ctxToken, is_single_node=True)
 
     def fetch(self, token):
+        """
+        Retrieve the results of a query.
+
+        :param token: 
+            Token associated with the query
+        :type: string
+        :return: Results of running the query
+        :rtype: ``cudf.DataFrame`` or ``dask_cudf.DataFrame``
+        """
         if self.dask_client is None:
             return self._get_results_single_node(token)
         return self._get_results_distributed(token)
@@ -3155,6 +3220,17 @@ class BlazingContext(object):
                 return ctxToken
 
     def status(self, token):
+        """
+        Get status of graph execution.
+
+        :param token:
+            Token for the graph to check the status of.
+        :type: string
+        :return: status of the query
+        :rtype: boolean
+
+        :raises [Exception]: The graph associated with the token does not exist.
+        """
         if token not in self.graphs:
             raise Exception(
                 "ERROR: The graph associated with the token '"
