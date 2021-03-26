@@ -8,7 +8,6 @@ Storage Plugins
 
    BlazingContext.gs
    BlazingContext.hdfs
-   BlazingContext.localfs
    BlazingContext.s3
    BlazingContext.show_filesystems
 
