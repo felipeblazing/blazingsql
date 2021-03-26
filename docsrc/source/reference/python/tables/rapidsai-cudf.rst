@@ -1,3 +1,5 @@
+.. _query_cudf:
+
 Query cuDF DataFrames
 =====================
 
