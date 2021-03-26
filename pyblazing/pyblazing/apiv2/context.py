@@ -2468,15 +2468,14 @@ class BlazingContext(object):
         """
         Drop table from BlazingContext memory.
 
-        Parameters
-        ----------
-
-        :param table_name: string. 
+        :param table_name: 
             Name of the table to drop.
+        :type table_name: string
 
 
-        Examples
-        --------
+        .. raw:: html
+        
+            <h2>Examples</h2>
 
         Drop 'taxi' table:
 
@@ -2488,8 +2487,12 @@ class BlazingContext(object):
         """
         Returns a list with the names of all created tables.
 
-        Example
-        --------
+        :return: list of names of all the tables
+        :rtype: list of strings
+
+        .. raw:: html
+        
+            <h2>Examples</h2>
 
         >>> from blazingsql import BlazingContext
         >>> bc = BlazingContext()
@@ -2507,14 +2510,17 @@ class BlazingContext(object):
         Returns a dictionary with the names of all the columns and their types
         for the specified table. A ValueError is thrown if the table is not found.
 
-        Parameters
-        ----------
+        :param table_name: 
+            Table name to describe
+        :type table_name: string
+        :return: dictionary with the names of columns and their types
+        :rtype: dictionary of strings
+        :raises [ValueError]: Table not found
 
-        table_name : string of the table name to describe
-
-        Example
-        --------
-
+        .. raw:: html
+        
+            <h2>Examples</h2>
+        
         >>> from blazingsql import BlazingContext
         >>> bc = BlazingContext()
         >>> bc.create_table('nation', "nation/*.parquet")
@@ -2922,18 +2928,27 @@ class BlazingContext(object):
         Returns results as cudf.DataFrame on single-GPU or dask_cudf.DataFrame
         when distributed (multi-GPU).
 
-        Parameters
-        ----------
-        query :                     string of SQL query.
-        algebra (optional) :        string of SQL algebra plan. Use this to
-                    run on a relational algebra, instead of the query string.
-        config_options (optional) : defaulted to empty. You can use this to
-                    set a specific set of config_options for this query
-                    instead of the ones set in BlazingContext.
-                    See BlazingContext for more info on this parameter
+        :param query:                     
+            SQL query.
+        :type query: string
+        :param algebra:        
+            Algebra plan. Use this to
+            run on a relational algebra, instead of the query string.
+        :type algebra: string, optional
+        :param config_options: 
+            You can use this to
+            set a specific set of ``config_options`` for this query
+            instead of the ones set in BlazingContext.
+            See :class:`BlazingContext` for more info on this parameter
+            **Default:** ``None``
+        :type config_options: dictionary of options, optional
 
-        Examples
-        --------
+        :return: DataFrame object
+        :rtype: ``cudf.DataFrame`` or ``dask_cudf.DataFrame``
+
+        .. raw:: html
+            
+            <h2>Examples</h2>
 
         Register a public S3 bucket, then create and query a table from it:
 
@@ -2972,8 +2987,6 @@ class BlazingContext(object):
         4     2017-01-01 07:42:09      17.540001    0.000000  24.900000
         ...                   ...            ...         ...        ...
 
-
-        Docs: https://docs.blazingdb.com/docs/single-gpu
         """
 
         # TODO: remove hardcoding
@@ -3164,17 +3177,20 @@ class BlazingContext(object):
         Query BlazingSQL's internal log (bsql_logs) that records events
         from all queries run.
 
-        Parameters
-        ----------
+        :param query:  
+            Value for the SQL query on bsql_logs table.
+        :type query: string
+        :param logs_table_name: 
+            Logs table name. **Default:** 'bsql_logs'.
+        :type logs_table_name: string, optional
+        :return: Log entries for the query
+        :rtype: ``cudf.DataFrame`` or ``dask_cudf.DataFrame``
 
-        query : string value SQL query on bsql_logs table.
-        logs_table_name (optional) : string of logs table name,
-                                     'bsql_logs' by default.
+        .. raw:: html
 
-        Examples
-        --------
+            <h2>Examples</h2>
 
-        Initialize BlazingContext and query bsql_logs
+        Initialize ``BlazingContext`` and query bsql_logs
         for how long each query took:
 
         >>> from blazingsql import BlazingContext
@@ -3192,8 +3208,6 @@ class BlazingContext(object):
         4  2020-03-30 23:10:44     45323   5897.124023
         ...                ...       ...           ...
 
-
-        Docs: https://docs.blazingdb.com/docs/blazingsql-logs
         """
         if not self.logs_initialized:
             self.logs_table_name = logs_table_name
@@ -3572,6 +3586,7 @@ class BlazingContext(object):
             pbar2.close()
 
     def do_progress_bar(self, arg, progress_bar_fn, wait_fn):
+        # TODO: make this method private
         if not self.enable_progress_bar:
             wait_fn(arg)
             return
