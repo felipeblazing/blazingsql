@@ -125,7 +125,7 @@ about 50% of GPU memory; ``initial_pool_size`` can be set with bytes.
     # allocate 10,000 MiB for pool
     bc = BlazingContext(initial_pool_size=1.0486e+10)
 
-Querying Data on a Multiple GPUs
+Querying Data on Multiple GPUs
 --------------------------------
 
 BlazingSQL can easily distribute up to multiple GPUs and servers by using 
