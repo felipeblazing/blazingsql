@@ -37,8 +37,6 @@ Managing tables
    BlazingContext.drop_table
    BlazingContext.describe_table
    BlazingContext.list_tables
-   BlazingContext.partition
-   BlazingContext.add_remove_table
 
 Querying tables
 ~~~~~~~~~~~~~~~
@@ -57,7 +55,7 @@ Ancillary methods
 .. autosummary::
    :toctree: api/
 
-   BlazingContext.do_progress_bar
    BlazingContext.get_free_memory
    BlazingContext.get_max_memory_used
    BlazingContext.reset_max_memory_used
+   BlazingContext.log
