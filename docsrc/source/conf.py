@@ -12,6 +12,7 @@
 #
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath('../../pyblazing'))
 sys.setrecursionlimit(1500)
 
@@ -34,9 +35,8 @@ author = 'BlazingDB, Inc.'
 language = "en"
 
 # The full version, including alpha/beta/rc tags
-version = '0.18'
+version = '0.19'
 release = f'v{version}'
-
 
 # -- General configuration ---------------------------------------------------
 
@@ -44,10 +44,11 @@ release = f'v{version}'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = ['recommonmark',
+                "sphinx_multiversion",
                 'sphinx.ext.extlinks',
                 'sphinx.ext.todo',
                 'sphinx.ext.autodoc',
-                "sphinx.ext.autosummary",
+                'sphinx.ext.autosummary',
                 'breathe',
                 'exhale'
                 ]
@@ -55,7 +56,7 @@ extensions = ['recommonmark',
 autosummary_generate = True 
 autosummary_imported_members = False
 
-# # Setup the exhale extension
+# Setup the exhale extension
 exhale_args = {
     # These arguments are required
     "containmentFolder":     "./xml",
@@ -66,6 +67,8 @@ exhale_args = {
     "createTreeView":        True,
     # TIP: if using the sphinx-bootstrap-theme, you need
     #"treeViewIsBootstrap": True
+    "exhaleExecutesDoxygen": True,
+    "exhaleUseDoxyfile": True
 }
 
 # Setup the breathe extension
@@ -86,7 +89,7 @@ highlight_language = 'py'
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ['build', 'Thumbs.db', '.DS_Store']
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -121,7 +124,9 @@ html_use_modindex = True
 
 html_theme_options = {
     "twitter_url": "https://twitter.com/blazingsql"
-    , "github_url": "https://github.com/BlazingDB/blazingsql"
+    , "repository_url": "https://github.com/BlazingDB/blazingsql"
+    , "use_repository_button": True
+    , "use_issues_button": True
     , "search_bar_position": "sidebar"
     , "search_bar_text": "Search BlazingSQL Docs"
     , "show_prev_next": True
@@ -134,12 +139,8 @@ html_theme_options = {
     , "navigation_with_keys": True
 }
 
-# html_theme_options = {
-    
-# }
-
 extlinks = {'io': (f'https://github.com/rapidsai/cudf/tree/branch-{version}/cpp/src/%s',
-                      'cuIO ')}
+                    'cuIO ')}
 
 html_context = {
     "github_user": "blazingdb",
@@ -147,6 +148,21 @@ html_context = {
     "github_version": "feedback",
     "doc_path": "docsrc/source",
 }
+
+html_sidebars = {
+    "**": ["versioning.html","sidebar-search-bs.html","sbt-sidebar-nav.html", "sbt-sidebar-footer.html"]
+}
+# Override tags for sphinx multiversion
+smv_tag_whitelist = r'^v\d+\.\d+$'
+
+# Include branch version and main branch for sphinx multiversion
+smv_branch_whitelist = r'^(branch.|main).*$'
+
+# Multiversion realease
+smv_released_pattern = r'^(tags/v.*|heads/branch.*)$'
+
+# Multiversion configure remote
+smv_remote_whitelist = r'^origin/branch-.*$'
 
 def skip(app, what, name, obj, would_skip, options):
     if name == "__init__":

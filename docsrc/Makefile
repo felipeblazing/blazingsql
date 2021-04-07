@@ -28,3 +28,6 @@ doxygen:
 clean:
 	@rm	-rf	"$(BUILDDIR)" "$(SOURCEDIR)/xml"
 	@$(SPHINXBUILD) -M clean "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+multiversion:
+	@sphinx-multiversion source build/html -D 'exhale_args.containmentFolder=$${sourcedir}/xml'
